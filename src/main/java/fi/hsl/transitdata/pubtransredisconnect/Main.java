@@ -42,22 +42,13 @@ public class Main {
 			System.exit(1);
 		}
 
-		Connection connection = null;
-		try {
-			connection = DriverManager.getConnection(connectionString);
-
+		try (Connection connection = DriverManager.getConnection(connectionString)) {
 			queryJourneyData(connection, jedis);
 			queryStopData(connection, jedis);
-
 		}
 		catch (SQLException e) {
 		    log.error("SQL Exception: ", e);
 		}
-		finally {
-			if (connection != null)
-			    try { connection.close(); } catch (Exception e) {}
-		}
-
 	}
 
 	private static void queryJourneyData(Connection connection, Jedis jedis) throws SQLException {
@@ -170,7 +161,6 @@ public class Main {
 		}
 
 		log.info("Inserted " + rowCounter + " dvj keys");
-		log.info("Number of dvj keys in redis: " + jedis.keys("dvj:*").size());
 	}
 
 	private static void handleStopResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
@@ -185,7 +175,6 @@ public class Main {
 		}
 
 		log.info("Inserted " + rowCounter + " jpp keys");
-		log.info("Number of jpp keys in redis: " + jedis.keys("jpp:*").size());
 	}
 
 }
