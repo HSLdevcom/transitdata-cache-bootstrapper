@@ -1,12 +1,14 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Scanner;
+import java.util.*;
 import java.io.File;
 import java.sql.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import com.microsoft.sqlserver.jdbc.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,42 +24,63 @@ public class Main {
 	private static final String START_TIME = "start_time";
 	private static final String OPERATING_DAY = "operating_day";
 
+	private Jedis jedis;
+    private final String connectionString;
 
-	public static void main(String[] args) {
+    private AtomicBoolean processingActive = new AtomicBoolean(false);
 
-		String connectionString = "";
+	public Main(Jedis jedis, String connectionString) {
+	    this.jedis = jedis;
+        this.connectionString = connectionString;
+    }
 
-		final String redisHost = Optional.ofNullable(System.getenv("REDIS_HOST")).orElse("localhost");
-		Jedis jedis = new Jedis(redisHost);
+    public void start() {
+        startPolling();
+        //Invoke manually the first task
+        process();
 
-		try {
-			connectionString = new Scanner(new File("/run/secrets/pubtrans_community_conn_string"))
-					.useDelimiter("\\Z").next();
-		} catch (Exception e) {
-            log.error("Failed to read the DB connection string from the file", e);
-		}
+    }
 
-		if (connectionString.equals("")) {
-			log.error("Connection string empty, aborting.");
-			System.exit(1);
-		}
+    private void startPolling() {
+        final long delayInSecs = 60;//TODO calc to start next hour
+        log.info("Starting scheduled poll task. Next execution in " + delayInSecs + "secs");
+        TimerTask task = new TimerTask() {
+            @Override
+            public void run() {
+                log.info("Poll timer tick");
+                process();
+            }
+        };
 
-		try (Connection connection = DriverManager.getConnection(connectionString)) {
-			queryJourneyData(connection, jedis);
-			queryStopData(connection, jedis);
-		}
-		catch (SQLException e) {
-		    log.error("SQL Exception: ", e);
-		}
-	}
+        ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+        executor.scheduleAtFixedRate(task, delayInSecs, 1000, TimeUnit.SECONDS);
+    }
 
-	private static void queryJourneyData(Connection connection, Jedis jedis) throws SQLException {
+    private void process() {
+        if (!processingActive.getAndSet(true)) {
+            log.info("Fetching data");
+            try (Connection connection = DriverManager.getConnection(connectionString)) {
+                queryJourneyData(connection, jedis);
+                queryStopData(connection, jedis);
+            }
+            catch (SQLException e) {
+                log.error("SQL Exception: ", e);
+            }
+            processingActive.set(false);
+            log.info("All data processed. c u next time!");
+        }
+        else {
+            log.warn("Processing already active, will not launch another task.");
+        }
+    }
+
+	private void queryJourneyData(Connection connection, Jedis jedis) throws SQLException {
 
 		Statement statement;
 		ResultSet resultSet;
 
 		String selectSql = new StringBuilder()
-				.append("SELECT ")
+				.append("SELECT TOP 10")
 				.append(" CONVERT(CHAR(16), DVJ.Id) AS " + DVJ_ID + ",")
 				.append(" KVV.StringValue AS " + ROUTE_NAME + ",")
 				.append(" SUBSTRING(")
@@ -108,13 +131,17 @@ public class Main {
 			e.printStackTrace();
 		}
 
-		if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {}
-		if (statement != null)  try { statement.close(); } catch (Exception e) {}
+		if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
+            log.error("Exception while closing resultset", e);
+        }
+		if (statement != null)  try { statement.close(); } catch (Exception e) {
+            log.error("Exception while closing statement", e);
+        }
 
 	}
 
 
-	private static void queryStopData(Connection connection, Jedis jedis) throws SQLException {
+	private void queryStopData(Connection connection, Jedis jedis) throws SQLException {
 
 		Statement statement;
 		ResultSet resultSet;
@@ -135,15 +162,19 @@ public class Main {
 			handleStopResultSet(resultSet, jedis);
 		}
 		catch (Exception e) {
-			e.printStackTrace();
+            log.error("Exception while handling resultset", e);
 		}
 
-		if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {}
-		if (statement != null)  try { statement.close(); } catch (Exception e) {}
+		if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
+		    log.error("Exception while closing resultset", e);
+        }
+		if (statement != null)  try { statement.close(); } catch (Exception e) {
+            log.error("Exception while closing statement", e);
+        }
 
 	}
 
-	private static void handleJourneyResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
+	private void handleJourneyResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
 
 		int rowCounter = 0;
 
@@ -163,7 +194,7 @@ public class Main {
 		log.info("Inserted " + rowCounter + " dvj keys");
 	}
 
-	private static void handleStopResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
+	private void handleStopResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
 
 		int rowCounter = 0;
 
@@ -176,5 +207,27 @@ public class Main {
 
 		log.info("Inserted " + rowCounter + " jpp keys");
 	}
+
+
+    public static void main(String[] args) {
+
+        String connectionString = "";
+
+        final String redisHost = Optional.ofNullable(System.getenv("REDIS_HOST")).orElse("localhost");
+        Jedis jedis = new Jedis(redisHost);
+        try {
+            connectionString = new Scanner(new File("/run/secrets/pubtrans_community_conn_string"))
+                    .useDelimiter("\\Z").next();
+        } catch (Exception e) {
+            log.error("Failed to read the DB connection string from the file", e);
+        }
+
+        if (connectionString.equals("")) {
+            log.error("Connection string empty, aborting.");
+            System.exit(1);
+        }
+        Main app = new Main(jedis, connectionString);
+        app.start();
+    }
 
 }
