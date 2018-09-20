@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/HSLdevcom/transitdata-cache-bootstrapper.svg?branch=master)](https://travis-ci.org/HSLdevcom/transitdata-cache-bootstrapper)
+
 # Transitdata-Cache-Bootstrapper
 
 This tool fetches information about DatedVehicleJourneys from Pubtrans and writes it to Redis.
