@@ -1,8 +1,11 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
 import java.util.*;
 import java.io.File;
 import java.sql.*;
@@ -37,7 +40,9 @@ public class Main {
 
     private AtomicBoolean processingActive = new AtomicBoolean(false);
 
-    private int redisTTLInSeconds = 0;
+    private int redisTTLInSeconds;
+    private int queryFutureInDays;
+    private int queryHistoryInDays;
 
     public Main(Config config, String connectionString) {
         this.config = config;
@@ -60,6 +65,11 @@ public class Main {
 
         redisTTLInSeconds = config.getInt("bootstrapper.redisTTLInDays") * 24 * 60 * 60;
         log.info("Redis TTL in secs: " + redisTTLInSeconds);
+
+        queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
+        queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
+        log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days");
+
     }
 
     private long secondsUntilNextEvenHour() {
@@ -107,10 +117,23 @@ public class Main {
         }
     }
 
+    private String formatDate(int offsetInDays) {
+        LocalDate now = LocalDate.now();
+        LocalDate then = now.plus(offsetInDays, ChronoUnit.DAYS);
+
+        String formattedString = DateTimeFormatter.ISO_LOCAL_DATE.format(then);
+        log.debug("offsetInDays results to date " + formattedString);
+
+        return formattedString;
+    }
+
     private void queryJourneyData(Connection connection, Jedis jedis) throws SQLException {
 
         Statement statement;
         ResultSet resultSet;
+
+        final String from = formatDate(-queryHistoryInDays);
+        final String to = formatDate(queryFutureInDays);
 
         String selectSql = new StringBuilder()
                 .append("SELECT ")
@@ -147,12 +170,13 @@ public class Main {
                 .append("     AND KVT.Id = KVV.IsOfKeyVariantTypeId")
                 .append("     AND KVV.IsForObjectId = VJ.Id")
                 .append("     AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL")
-                .append("     AND DVJ.OperatingDayDate >= '2018-06-06'")
-                .append("     AND DVJ.OperatingDayDate < '2018-12-31'")
+                .append("     AND DVJ.OperatingDayDate >= '" + from + "'")
+                .append("     AND DVJ.OperatingDayDate < '" + to + "'")
                 .append("     AND DVJ.IsReplacedById IS NULL")
                 .toString();
 
         log.info("Starting journey query");
+        long now = System.currentTimeMillis();
 
         statement = connection.createStatement();
         resultSet = statement.executeQuery(selectSql);
@@ -163,6 +187,8 @@ public class Main {
         catch (Exception e) {
             e.printStackTrace();
         }
+        long elapsed = (System.currentTimeMillis() - now) / 1000;
+        log.info("Data handled in " + elapsed + " seconds");
 
         if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
             log.error("Exception while closing resultset", e);
@@ -187,6 +213,7 @@ public class Main {
                 .toString();
 
         log.info("Starting stop query");
+        long now = System.currentTimeMillis();
 
         statement = connection.createStatement();
         resultSet = statement.executeQuery(selectSql);
@@ -197,6 +224,8 @@ public class Main {
         catch (Exception e) {
             log.error("Exception while handling resultset", e);
         }
+        long elapsed = (System.currentTimeMillis() - now) / 1000;
+        log.info("Data handled in " + elapsed + " seconds");
 
         if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
             log.error("Exception while closing resultset", e);
