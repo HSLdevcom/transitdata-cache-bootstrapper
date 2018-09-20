@@ -1,10 +1,8 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalUnit;
 import java.util.*;
 import java.io.File;
 import java.sql.*;
@@ -15,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.microsoft.sqlserver.jdbc.*;
 import fi.hsl.common.config.ConfigUtils;
+import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
@@ -24,7 +23,7 @@ public class Main {
 	private static final Logger log = LoggerFactory.getLogger(Main.class);
 
 	private static final String DVJ_ID = "dvj_id";
-	private static final String DIRECTION = "direction";
+    private static final String DIRECTION = "direction";
 	private static final String ROUTE_NAME = "route";
 	private static final String START_TIME = "start_time";
 	private static final String OPERATING_DAY = "operating_day";
@@ -197,13 +196,13 @@ public class Main {
 
 		while(resultSet.next()) {
 		    Map<String, String> values = new HashMap<>();
+		    values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(ROUTE_NAME));
+			values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(DIRECTION));
+			values.put(TransitdataProperties.KEY_START_TIME, resultSet.getString(START_TIME));
+			values.put(TransitdataProperties.KEY_OPERATING_DAY, resultSet.getString(OPERATING_DAY));
 
-		   	values.put("route-name", resultSet.getString(ROUTE_NAME));
-			values.put("direction", resultSet.getString(DIRECTION));
-			values.put("start-time", resultSet.getString(START_TIME));
-			values.put("operating-day", resultSet.getString(OPERATING_DAY));
-
-			jedis.hmset("dvj:" + resultSet.getString(DVJ_ID), values);
+			String key = TransitdataProperties.REDIS_PREFIX_DVJ + resultSet.getString(DVJ_ID);
+			jedis.hmset(key, values);
 
 			rowCounter++;
 		}
@@ -216,8 +215,8 @@ public class Main {
 		int rowCounter = 0;
 
 		while(resultSet.next()) {
-
-			jedis.set("jpp:" + resultSet.getString(1), resultSet.getString(2));
+		    String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString(1);
+			jedis.set(key, resultSet.getString(2));
 
 			rowCounter++;
 		}
