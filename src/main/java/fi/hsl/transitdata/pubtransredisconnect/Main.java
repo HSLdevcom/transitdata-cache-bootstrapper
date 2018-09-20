@@ -20,21 +20,21 @@ import redis.clients.jedis.Jedis;
 
 public class Main {
 
-	private static final Logger log = LoggerFactory.getLogger(Main.class);
+    private static final Logger log = LoggerFactory.getLogger(Main.class);
 
-	private static final String DVJ_ID = "dvj_id";
+    private static final String DVJ_ID = "dvj_id";
     private static final String DIRECTION = "direction";
-	private static final String ROUTE_NAME = "route";
-	private static final String START_TIME = "start_time";
-	private static final String OPERATING_DAY = "operating_day";
+    private static final String ROUTE_NAME = "route";
+    private static final String START_TIME = "start_time";
+    private static final String OPERATING_DAY = "operating_day";
 
-	private Jedis jedis;
+    private Jedis jedis;
     private final String connectionString;
 
     private AtomicBoolean processingActive = new AtomicBoolean(false);
 
-	public Main(Jedis jedis, String connectionString) {
-	    this.jedis = jedis;
+    public Main(Jedis jedis, String connectionString) {
+        this.jedis = jedis;
         this.connectionString = connectionString;
     }
 
@@ -46,7 +46,7 @@ public class Main {
     }
 
     private long secondsUntilNextEvenHour() {
-	    OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime nextHour = now.plusHours(1);
         OffsetDateTime evenHour = nextHour.truncatedTo(ChronoUnit.HOURS);
 
@@ -56,8 +56,8 @@ public class Main {
     }
 
     private void startPolling() {
-	    final long periodInSecs = 60 * 60;
-	    final long delayInSecs = secondsUntilNextEvenHour();
+        final long periodInSecs = 60 * 60;
+        final long delayInSecs = secondsUntilNextEvenHour();
 
         log.info("Starting scheduled poll task. First poll execution in " + delayInSecs + "secs");
         TimerTask task = new TimerTask() {
@@ -90,139 +90,139 @@ public class Main {
         }
     }
 
-	private void queryJourneyData(Connection connection, Jedis jedis) throws SQLException {
+    private void queryJourneyData(Connection connection, Jedis jedis) throws SQLException {
 
-		Statement statement;
-		ResultSet resultSet;
+        Statement statement;
+        ResultSet resultSet;
 
-		String selectSql = new StringBuilder()
-				.append("SELECT ")
-				.append(" CONVERT(CHAR(16), DVJ.Id) AS " + DVJ_ID + ",")
-				.append(" KVV.StringValue AS " + ROUTE_NAME + ",")
-				.append(" SUBSTRING(")
-				.append("    CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid),")
-				.append("       12,")
-				.append("       1")
-				.append("   ) AS " + DIRECTION + ",")
-				.append(" CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + OPERATING_DAY + ", ")
-				.append(" RIGHT('0' + (CONVERT(VARCHAR(2), (DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime)))), 2) ")
-				.append(" + ':' + RIGHT('0' + CONVERT(VARCHAR(2), ((DATEDIFF(MINUTE, '1900-01-01', PlannedStartOffsetDateTime))")
-				.append("- ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS " + START_TIME + " ")
-				.append(" FROM")
-				.append("     ptDOI4_Community.dbo.DatedVehicleJourney AS DVJ,")
-				.append("     ptDOI4_Community.dbo.VehicleJourney AS VJ,")
-				.append("     ptDOI4_Community.dbo.VehicleJourneyTemplate AS VJT,")
-				.append("     ptDOI4_Community.T.KeyVariantValue AS KVV,")
-				.append("     ptDOI4_Community.dbo.KeyType AS KT,")
-				.append("     ptDOI4_Community.dbo.KeyVariantType AS KVT,")
-				.append("     ptDOI4_Community.dbo.ObjectType AS OT")
-				.append(" WHERE")
-				.append("     DVJ.IsBasedOnVehicleJourneyId = VJ.Id")
-				.append("     AND DVJ.IsBasedOnVehicleJourneyTemplateId = VJT.Id")
-				.append("     AND (")
-				.append("         KT.Name = 'JoreIdentity'")
-				.append("         OR KT.Name = 'JoreRouteIdentity'")
-				.append("         OR KT.Name = 'RouteName'")
-				.append("     )")
-				.append("     AND KT.ExtendsObjectTypeNumber = OT.Number")
-				.append("     AND OT.Name = 'VehicleJourney'")
-				.append("     AND KT.Id = KVT.IsForKeyTypeId")
-				.append("     AND KVT.Id = KVV.IsOfKeyVariantTypeId")
-				.append("     AND KVV.IsForObjectId = VJ.Id")
-				.append("     AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL")
-				.append("     AND DVJ.OperatingDayDate >= '2018-06-06'")
-				.append("     AND DVJ.OperatingDayDate < '2018-12-31'")
-				.append("     AND DVJ.IsReplacedById IS NULL")
-				.toString();
+        String selectSql = new StringBuilder()
+                .append("SELECT ")
+                .append(" CONVERT(CHAR(16), DVJ.Id) AS " + DVJ_ID + ",")
+                .append(" KVV.StringValue AS " + ROUTE_NAME + ",")
+                .append(" SUBSTRING(")
+                .append("    CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid),")
+                .append("       12,")
+                .append("       1")
+                .append("   ) AS " + DIRECTION + ",")
+                .append(" CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + OPERATING_DAY + ", ")
+                .append(" RIGHT('0' + (CONVERT(VARCHAR(2), (DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime)))), 2) ")
+                .append(" + ':' + RIGHT('0' + CONVERT(VARCHAR(2), ((DATEDIFF(MINUTE, '1900-01-01', PlannedStartOffsetDateTime))")
+                .append("- ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS " + START_TIME + " ")
+                .append(" FROM")
+                .append("     ptDOI4_Community.dbo.DatedVehicleJourney AS DVJ,")
+                .append("     ptDOI4_Community.dbo.VehicleJourney AS VJ,")
+                .append("     ptDOI4_Community.dbo.VehicleJourneyTemplate AS VJT,")
+                .append("     ptDOI4_Community.T.KeyVariantValue AS KVV,")
+                .append("     ptDOI4_Community.dbo.KeyType AS KT,")
+                .append("     ptDOI4_Community.dbo.KeyVariantType AS KVT,")
+                .append("     ptDOI4_Community.dbo.ObjectType AS OT")
+                .append(" WHERE")
+                .append("     DVJ.IsBasedOnVehicleJourneyId = VJ.Id")
+                .append("     AND DVJ.IsBasedOnVehicleJourneyTemplateId = VJT.Id")
+                .append("     AND (")
+                .append("         KT.Name = 'JoreIdentity'")
+                .append("         OR KT.Name = 'JoreRouteIdentity'")
+                .append("         OR KT.Name = 'RouteName'")
+                .append("     )")
+                .append("     AND KT.ExtendsObjectTypeNumber = OT.Number")
+                .append("     AND OT.Name = 'VehicleJourney'")
+                .append("     AND KT.Id = KVT.IsForKeyTypeId")
+                .append("     AND KVT.Id = KVV.IsOfKeyVariantTypeId")
+                .append("     AND KVV.IsForObjectId = VJ.Id")
+                .append("     AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL")
+                .append("     AND DVJ.OperatingDayDate >= '2018-06-06'")
+                .append("     AND DVJ.OperatingDayDate < '2018-12-31'")
+                .append("     AND DVJ.IsReplacedById IS NULL")
+                .toString();
 
-		log.info("Starting journey query");
+        log.info("Starting journey query");
 
-		statement = connection.createStatement();
-		resultSet = statement.executeQuery(selectSql);
+        statement = connection.createStatement();
+        resultSet = statement.executeQuery(selectSql);
 
-		try {
-			handleJourneyResultSet(resultSet, jedis);
-		}
-		catch (Exception e) {
-			e.printStackTrace();
-		}
+        try {
+            handleJourneyResultSet(resultSet, jedis);
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
 
-		if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
+        if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
             log.error("Exception while closing resultset", e);
         }
-		if (statement != null)  try { statement.close(); } catch (Exception e) {
+        if (statement != null)  try { statement.close(); } catch (Exception e) {
             log.error("Exception while closing statement", e);
         }
 
-	}
+    }
 
 
-	private void queryStopData(Connection connection, Jedis jedis) throws SQLException {
+    private void queryStopData(Connection connection, Jedis jedis) throws SQLException {
 
-		Statement statement;
-		ResultSet resultSet;
+        Statement statement;
+        ResultSet resultSet;
 
-		String selectSql = new StringBuilder()
-				.append("SELECT ")
-				.append("[Gid], [Number] ")
-				.append("FROM [ptDOI4_Community].[dbo].[JourneyPatternPoint] AS JPP ")
-				.append("GROUP BY JPP.Gid, JPP.Number")
-				.toString();
+        String selectSql = new StringBuilder()
+                .append("SELECT ")
+                .append("[Gid], [Number] ")
+                .append("FROM [ptDOI4_Community].[dbo].[JourneyPatternPoint] AS JPP ")
+                .append("GROUP BY JPP.Gid, JPP.Number")
+                .toString();
 
-		log.info("Starting stop query");
+        log.info("Starting stop query");
 
-		statement = connection.createStatement();
-		resultSet = statement.executeQuery(selectSql);
+        statement = connection.createStatement();
+        resultSet = statement.executeQuery(selectSql);
 
-		try {
-			handleStopResultSet(resultSet, jedis);
-		}
-		catch (Exception e) {
+        try {
+            handleStopResultSet(resultSet, jedis);
+        }
+        catch (Exception e) {
             log.error("Exception while handling resultset", e);
-		}
-
-		if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
-		    log.error("Exception while closing resultset", e);
         }
-		if (statement != null)  try { statement.close(); } catch (Exception e) {
+
+        if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
+            log.error("Exception while closing resultset", e);
+        }
+        if (statement != null)  try { statement.close(); } catch (Exception e) {
             log.error("Exception while closing statement", e);
         }
 
-	}
+    }
 
-	private void handleJourneyResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
+    private void handleJourneyResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
 
-		int rowCounter = 0;
+        int rowCounter = 0;
 
-		while(resultSet.next()) {
-		    Map<String, String> values = new HashMap<>();
-		    values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(ROUTE_NAME));
-			values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(DIRECTION));
-			values.put(TransitdataProperties.KEY_START_TIME, resultSet.getString(START_TIME));
-			values.put(TransitdataProperties.KEY_OPERATING_DAY, resultSet.getString(OPERATING_DAY));
+        while(resultSet.next()) {
+            Map<String, String> values = new HashMap<>();
+            values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(ROUTE_NAME));
+            values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(DIRECTION));
+            values.put(TransitdataProperties.KEY_START_TIME, resultSet.getString(START_TIME));
+            values.put(TransitdataProperties.KEY_OPERATING_DAY, resultSet.getString(OPERATING_DAY));
 
-			String key = TransitdataProperties.REDIS_PREFIX_DVJ + resultSet.getString(DVJ_ID);
-			jedis.hmset(key, values);
+            String key = TransitdataProperties.REDIS_PREFIX_DVJ + resultSet.getString(DVJ_ID);
+            jedis.hmset(key, values);
 
-			rowCounter++;
-		}
+            rowCounter++;
+        }
 
-		log.info("Inserted " + rowCounter + " dvj keys");
-	}
+        log.info("Inserted " + rowCounter + " dvj keys");
+    }
 
-	private void handleStopResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
+    private void handleStopResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
 
-		int rowCounter = 0;
+        int rowCounter = 0;
 
-		while(resultSet.next()) {
-		    String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString(1);
-			jedis.set(key, resultSet.getString(2));
+        while(resultSet.next()) {
+            String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString(1);
+            jedis.set(key, resultSet.getString(2));
 
-			rowCounter++;
-		}
+            rowCounter++;
+        }
 
-		log.info("Inserted " + rowCounter + " jpp keys");
-	}
+        log.info("Inserted " + rowCounter + " jpp keys");
+    }
 
 
     public static void main(String[] args) {
