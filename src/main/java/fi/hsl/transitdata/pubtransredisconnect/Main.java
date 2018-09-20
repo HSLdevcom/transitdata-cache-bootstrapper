@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.microsoft.sqlserver.jdbc.*;
+import fi.hsl.common.config.ConfigUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
@@ -229,10 +230,12 @@ public class Main {
 
         String connectionString = "";
 
-        final String redisHost = Optional.ofNullable(System.getenv("REDIS_HOST")).orElse("localhost");
+        final String redisHost = ConfigUtils.getEnv("REDIS_HOST").orElse("localhost");
         Jedis jedis = new Jedis(redisHost);
         try {
-            connectionString = new Scanner(new File("/run/secrets/pubtrans_community_conn_string"))
+            //Default path is what works with Docker out-of-the-box. Override with a local file if needed
+            final String secretFilePath = ConfigUtils.getEnv("FILEPATH_CONNECTION_STRING").orElse("/run/secrets/pubtrans_community_conn_string");
+            connectionString = new Scanner(new File(secretFilePath))
                     .useDelimiter("\\Z").next();
         } catch (Exception e) {
             log.error("Failed to read the DB connection string from the file", e);
