@@ -1,6 +1,10 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
 import java.util.*;
 import java.io.File;
 import java.sql.*;
@@ -36,14 +40,26 @@ public class Main {
 
     public void start() {
         startPolling();
-        //Invoke manually the first task
+        //Invoke manually the first task immediately
         process();
 
     }
 
+    private long secondsUntilNextEvenHour() {
+	    OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime nextHour = now.plusHours(1);
+        OffsetDateTime evenHour = nextHour.truncatedTo(ChronoUnit.HOURS);
+
+        log.debug("Current time is " + now.toString() + ", next even hour is at " + evenHour.toString());
+
+        return Duration.between(now, evenHour).getSeconds();
+    }
+
     private void startPolling() {
-        final long delayInSecs = 60;//TODO calc to start next hour
-        log.info("Starting scheduled poll task. Next execution in " + delayInSecs + "secs");
+	    final long periodInSecs = 60 * 60;
+	    final long delayInSecs = secondsUntilNextEvenHour();
+
+        log.info("Starting scheduled poll task. First poll execution in " + delayInSecs + "secs");
         TimerTask task = new TimerTask() {
             @Override
             public void run() {
@@ -53,7 +69,7 @@ public class Main {
         };
 
         ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
-        executor.scheduleAtFixedRate(task, delayInSecs, 1000, TimeUnit.SECONDS);
+        executor.scheduleAtFixedRate(task, delayInSecs, periodInSecs, TimeUnit.SECONDS);
     }
 
     private void process() {
@@ -67,7 +83,7 @@ public class Main {
                 log.error("SQL Exception: ", e);
             }
             processingActive.set(false);
-            log.info("All data processed. c u next time!");
+            log.info("All data processed, thank you.");
         }
         else {
             log.warn("Processing already active, will not launch another task.");
@@ -80,7 +96,7 @@ public class Main {
 		ResultSet resultSet;
 
 		String selectSql = new StringBuilder()
-				.append("SELECT TOP 10")
+				.append("SELECT ")
 				.append(" CONVERT(CHAR(16), DVJ.Id) AS " + DVJ_ID + ",")
 				.append(" KVV.StringValue AS " + ROUTE_NAME + ",")
 				.append(" SUBSTRING(")
