@@ -1,8 +1,11 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
 import java.util.*;
 import java.io.File;
 import java.sql.*;
@@ -12,6 +15,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.microsoft.sqlserver.jdbc.*;
+import com.typesafe.config.Config;
+import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.config.ConfigUtils;
 import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
@@ -28,20 +33,42 @@ public class Main {
     private static final String START_TIME = "start_time";
     private static final String OPERATING_DAY = "operating_day";
 
+    Config config;
+
     private Jedis jedis;
     private final String connectionString;
 
     private AtomicBoolean processingActive = new AtomicBoolean(false);
 
-    public Main(Jedis jedis, String connectionString) {
-        this.jedis = jedis;
+    private int redisTTLInSeconds;
+    private int queryFutureInDays;
+    private int queryHistoryInDays;
+
+    public Main(Config config, String connectionString) {
+        this.config = config;
         this.connectionString = connectionString;
     }
 
     public void start() {
+        initialize();
+
         startPolling();
         //Invoke manually the first task immediately
         process();
+
+    }
+
+    private void initialize() {
+        final String redisHost = config.getString("redis.host");
+        log.info("Connecting to redis at " + redisHost);
+        jedis = new Jedis(redisHost);
+
+        redisTTLInSeconds = config.getInt("bootstrapper.redisTTLInDays") * 24 * 60 * 60;
+        log.info("Redis TTL in secs: " + redisTTLInSeconds);
+
+        queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
+        queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
+        log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days");
 
     }
 
@@ -90,10 +117,23 @@ public class Main {
         }
     }
 
+    private String formatDate(int offsetInDays) {
+        LocalDate now = LocalDate.now();
+        LocalDate then = now.plus(offsetInDays, ChronoUnit.DAYS);
+
+        String formattedString = DateTimeFormatter.ISO_LOCAL_DATE.format(then);
+        log.debug("offsetInDays results to date " + formattedString);
+
+        return formattedString;
+    }
+
     private void queryJourneyData(Connection connection, Jedis jedis) throws SQLException {
 
         Statement statement;
         ResultSet resultSet;
+
+        final String from = formatDate(-queryHistoryInDays);
+        final String to = formatDate(queryFutureInDays);
 
         String selectSql = new StringBuilder()
                 .append("SELECT ")
@@ -130,12 +170,13 @@ public class Main {
                 .append("     AND KVT.Id = KVV.IsOfKeyVariantTypeId")
                 .append("     AND KVV.IsForObjectId = VJ.Id")
                 .append("     AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL")
-                .append("     AND DVJ.OperatingDayDate >= '2018-06-06'")
-                .append("     AND DVJ.OperatingDayDate < '2018-12-31'")
+                .append("     AND DVJ.OperatingDayDate >= '" + from + "'")
+                .append("     AND DVJ.OperatingDayDate < '" + to + "'")
                 .append("     AND DVJ.IsReplacedById IS NULL")
                 .toString();
 
         log.info("Starting journey query");
+        long now = System.currentTimeMillis();
 
         statement = connection.createStatement();
         resultSet = statement.executeQuery(selectSql);
@@ -146,6 +187,8 @@ public class Main {
         catch (Exception e) {
             e.printStackTrace();
         }
+        long elapsed = (System.currentTimeMillis() - now) / 1000;
+        log.info("Data handled in " + elapsed + " seconds");
 
         if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
             log.error("Exception while closing resultset", e);
@@ -170,6 +213,7 @@ public class Main {
                 .toString();
 
         log.info("Starting stop query");
+        long now = System.currentTimeMillis();
 
         statement = connection.createStatement();
         resultSet = statement.executeQuery(selectSql);
@@ -180,6 +224,8 @@ public class Main {
         catch (Exception e) {
             log.error("Exception while handling resultset", e);
         }
+        long elapsed = (System.currentTimeMillis() - now) / 1000;
+        log.info("Data handled in " + elapsed + " seconds");
 
         if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
             log.error("Exception while closing resultset", e);
@@ -203,6 +249,7 @@ public class Main {
 
             String key = TransitdataProperties.REDIS_PREFIX_DVJ + resultSet.getString(DVJ_ID);
             jedis.hmset(key, values);
+            jedis.expire(key, redisTTLInSeconds);
 
             rowCounter++;
         }
@@ -216,7 +263,7 @@ public class Main {
 
         while(resultSet.next()) {
             String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString(1);
-            jedis.set(key, resultSet.getString(2));
+            jedis.setex(key, redisTTLInSeconds, resultSet.getString(2));
 
             rowCounter++;
         }
@@ -229,8 +276,6 @@ public class Main {
 
         String connectionString = "";
 
-        final String redisHost = ConfigUtils.getEnv("REDIS_HOST").orElse("localhost");
-        Jedis jedis = new Jedis(redisHost);
         try {
             //Default path is what works with Docker out-of-the-box. Override with a local file if needed
             final String secretFilePath = ConfigUtils.getEnv("FILEPATH_CONNECTION_STRING").orElse("/run/secrets/pubtrans_community_conn_string");
@@ -244,7 +289,9 @@ public class Main {
             log.error("Connection string empty, aborting.");
             System.exit(1);
         }
-        Main app = new Main(jedis, connectionString);
+        Config config = ConfigParser.createConfig();
+
+        Main app = new Main(config, connectionString);
         app.start();
     }
 
