@@ -11,7 +11,7 @@
             </layout>
         </encoder>
     </appender>
-    <logger name="fi.hsl.transitdata" level="debug" additivity="false">
+    <logger name="fi.hsl" level="debug" additivity="false">
         <appender-ref ref="stdout" />
     </logger>
     <root level="info">
