@@ -185,7 +185,7 @@ public class Main {
             handleJourneyResultSet(resultSet, jedis);
         }
         catch (Exception e) {
-            e.printStackTrace();
+            log.error("Failed to handle result set", e);
         }
         long elapsed = (System.currentTimeMillis() - now) / 1000;
         log.info("Data handled in " + elapsed + " seconds");
@@ -220,6 +220,7 @@ public class Main {
 
         try {
             handleStopResultSet(resultSet, jedis);
+            updateTimestamp(jedis);
         }
         catch (Exception e) {
             log.error("Exception while handling resultset", e);
@@ -234,6 +235,13 @@ public class Main {
             log.error("Exception while closing statement", e);
         }
 
+    }
+
+    void updateTimestamp(Jedis jedis) {
+        OffsetDateTime now = OffsetDateTime.now();
+        String ts = DateTimeFormatter.ISO_INSTANT.format(now);
+        log.info("Updating Redis with latest timestamp: " + ts);
+        jedis.set(TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP, ts);
     }
 
     private void handleJourneyResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
