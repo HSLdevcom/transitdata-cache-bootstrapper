@@ -259,6 +259,14 @@ public class Main {
             jedis.hmset(key, values);
             jedis.expire(key, redisTTLInSeconds);
 
+            //Insert a composite key that allows reverse lookup of the dvj id
+            //The format is route-direction-date-time
+            String joreKey = TransitdataProperties.REDIS_PREFIX_JORE_ID + "-" + resultSet.getString(ROUTE_NAME) + "-" +
+                    resultSet.getString(DIRECTION) + "-" + resultSet.getString(OPERATING_DAY) + "-" +
+                    resultSet.getString(START_TIME);
+            jedis.set(joreKey, resultSet.getString(DVJ_ID));
+            jedis.expire(joreKey, redisTTLInSeconds);
+
             rowCounter++;
         }
 
