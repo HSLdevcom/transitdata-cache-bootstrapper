@@ -38,6 +38,7 @@ public class Main {
     private Jedis jedis;
     private final String connectionString;
 
+    private ScheduledExecutorService executor;
     private AtomicBoolean processingActive = new AtomicBoolean(false);
 
     private int redisTTLInSeconds;
@@ -95,7 +96,7 @@ public class Main {
             }
         };
 
-        ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+        executor = Executors.newSingleThreadScheduledExecutor();
         executor.scheduleAtFixedRate(task, delayInSecs, periodInSecs, TimeUnit.SECONDS);
     }
 
@@ -105,16 +106,31 @@ public class Main {
             try (Connection connection = DriverManager.getConnection(connectionString)) {
                 queryJourneyData(connection, jedis);
                 queryStopData(connection, jedis);
+
+                log.info("All data processed, thank you.");
             }
-            catch (SQLException e) {
-                log.error("SQL Exception: ", e);
+            catch (Exception e) {
+                log.error("Exception during query ", e);
+                shutdown();
             }
-            processingActive.set(false);
-            log.info("All data processed, thank you.");
+            finally {
+                processingActive.set(false);
+            }
         }
         else {
             log.warn("Processing already active, will not launch another task.");
         }
+    }
+
+    private void shutdown() {
+        log.warn("Shutting down the application.");
+        if (jedis != null) {
+            jedis.close();
+        }
+        if (executor != null) {
+            executor.shutdown();
+        }
+        log.info("Shutdown completed, bye.");
     }
 
     private String formatDate(int offsetInDays) {
