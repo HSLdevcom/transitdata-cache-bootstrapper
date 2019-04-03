@@ -1,10 +1,7 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
-import java.text.ParseException;
 import java.time.*;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalUnit;
 import java.util.*;
 import java.io.File;
 import java.sql.*;
@@ -12,15 +9,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 
-import com.microsoft.sqlserver.jdbc.*;
 import com.typesafe.config.*;
 import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.config.ConfigUtils;
-import fi.hsl.common.gtfsrt.JoreDateTime;
-import fi.hsl.common.metro.MetroStops;
-import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
