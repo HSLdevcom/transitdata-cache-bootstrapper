@@ -44,6 +44,7 @@ public class MetroJourneyResultSetProcessor implements IResultSetProcessor {
             if (maybeShortName.isPresent()) {
                 final String shortName = maybeShortName.get();
                 Map<String, String> values = new HashMap<>();
+                values.put(TransitdataProperties.KEY_DVJ_ID, resultSet.getString(QueryUtil.DVJ_ID));
                 values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(QueryUtil.ROUTE_NAME));
                 values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(QueryUtil.DIRECTION));
                 values.put(TransitdataProperties.KEY_START_TIME, startTime);
