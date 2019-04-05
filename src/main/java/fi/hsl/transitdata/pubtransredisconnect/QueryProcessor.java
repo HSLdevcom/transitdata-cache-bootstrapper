@@ -27,7 +27,7 @@ public class QueryProcessor {
         ResultSet resultSet = null;
         try {
             final String query = processor.getQuery();
-            resultSet = executeQuery(connection, query);
+            resultSet = executeQuery(query);
             processor.processResultSet(resultSet);
         } catch (Exception e) {
             log.error("Failed to process query", e);
@@ -47,13 +47,13 @@ public class QueryProcessor {
         this.connection = connection;
     }
 
-    public static ResultSet executeQuery(final Connection connection, final String query) throws SQLException {
+    private ResultSet executeQuery(final String query) throws SQLException {
         Statement statement = connection.createStatement();
         ResultSet resultSet = statement.executeQuery(query);
         return resultSet;
     }
 
-    public static void closeQuery(final ResultSet resultSet) {
+    private static void closeQuery(final ResultSet resultSet) {
         Statement statement = null;
         try { statement = resultSet.getStatement(); } catch (Exception e) {
             log.error("Failed to get Statement", e);
