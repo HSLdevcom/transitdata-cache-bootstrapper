@@ -3,43 +3,40 @@ package fi.hsl.transitdata.pubtransredisconnect;
 import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.clients.jedis.Jedis;
 
 import java.sql.ResultSet;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 
-public class StopResultSetProcessor implements IResultSetProcessor {
+public class StopResultSetProcessor extends AbstractResultSetProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(StopResultSetProcessor.class);
 
-    private Jedis jedis;
-    private int redisTTLInSeconds;
-
-    public StopResultSetProcessor(final Jedis jedis, final int redisTTLInSeconds) {
-        this.jedis = jedis;
-        this.redisTTLInSeconds = redisTTLInSeconds;
+    public StopResultSetProcessor(final RedisUtils redisUtils) {
+        super(redisUtils);
     }
 
-    public void process(final ResultSet resultSet) throws Exception {
+    public void processResultSet(final ResultSet resultSet) throws Exception {
         int rowCounter = 0;
 
         while(resultSet.next()) {
             String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString(1);
-            jedis.setex(key, redisTTLInSeconds, resultSet.getString(2));
+            redisUtils.setValue(key, resultSet.getString(2));
 
             rowCounter++;
         }
 
-        updateTimestamp(jedis);
+        redisUtils.updateTimestamp();
 
         log.info("Inserted " + rowCounter + " jpp keys");
     }
 
-    void updateTimestamp(Jedis jedis) {
-        OffsetDateTime now = OffsetDateTime.now();
-        String ts = DateTimeFormatter.ISO_INSTANT.format(now);
-        log.info("Updating Redis with latest timestamp: " + ts);
-        jedis.set(TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP, ts);
+    protected String getQuery() {
+        String query = new StringBuilder()
+                .append("SELECT ")
+                .append("   [Gid], [Number] ")
+                .append("FROM [ptDOI4_Community].[dbo].[JourneyPatternPoint] AS JPP ")
+                .append("GROUP BY JPP.Gid, JPP.Number ")
+                .toString();
+        return query;
     }
+
 }

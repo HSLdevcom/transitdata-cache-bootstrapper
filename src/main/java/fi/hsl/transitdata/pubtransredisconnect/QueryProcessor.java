@@ -5,37 +5,34 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 
 public class QueryProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(QueryProcessor.class);
 
     private Connection connection;
-    private IResultSetProcessor processor;
 
     public QueryProcessor() {}
 
-    public QueryProcessor(final Connection connection, final IResultSetProcessor processor) {
+    public QueryProcessor(final Connection connection) {
         this.connection = connection;
-        this.processor = processor;
     }
 
-    public QueryProcessor(final IResultSetProcessor processor) {
-        this.processor = processor;
-    }
-
-    public void executeQuery(final String query) {
+    public void executeAndProcessQuery(final AbstractResultSetProcessor processor) {
         log.info("Starting query");
         long now = System.currentTimeMillis();
 
         ResultSet resultSet = null;
         try {
-            resultSet = QueryUtil.executeQuery(connection, query);
-            processor.process(resultSet);
+            final String query = processor.getQuery();
+            resultSet = executeQuery(connection, query);
+            processor.processResultSet(resultSet);
         } catch (Exception e) {
             log.error("Failed to process query", e);
         } finally {
-            QueryUtil.closeQuery(resultSet);
+            closeQuery(resultSet);
         }
 
         long elapsed = (System.currentTimeMillis() - now) / 1000;
@@ -50,11 +47,22 @@ public class QueryProcessor {
         this.connection = connection;
     }
 
-    public IResultSetProcessor getProcessor() {
-        return processor;
+    public static ResultSet executeQuery(final Connection connection, final String query) throws SQLException {
+        Statement statement = connection.createStatement();
+        ResultSet resultSet = statement.executeQuery(query);
+        return resultSet;
     }
 
-    public void setProcessor(final IResultSetProcessor processor) {
-        this.processor = processor;
+    public static void closeQuery(final ResultSet resultSet) {
+        Statement statement = null;
+        try { statement = resultSet.getStatement(); } catch (Exception e) {
+            log.error("Failed to get Statement", e);
+        }
+        if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
+            log.error("Failed to close ResultSet", e);
+        }
+        if (statement != null)  try { statement.close(); } catch (Exception e) {
+            log.error("Failed to close Statement", e);
+        }
     }
 }

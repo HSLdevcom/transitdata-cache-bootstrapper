@@ -1,6 +1,7 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
 import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.io.File;
@@ -29,9 +30,9 @@ public class Main {
     private ScheduledExecutorService executor;
     private AtomicBoolean processingActive = new AtomicBoolean(false);
 
-    private int redisTTLInSeconds;
-    private int queryFutureInDays;
-    private int queryHistoryInDays;
+    private RedisUtils redisUtils;
+    private String from;
+    private String to;
 
     public Main(Config config, String connectionString) {
         this.config = config;
@@ -40,25 +41,28 @@ public class Main {
 
     public void start() {
         initialize();
-
         startPolling();
         //Invoke manually the first task immediately
         process();
-
     }
 
     private void initialize() {
-        final String redisHost = config.getString("redis.host");
-        log.info("Connecting to redis at " + redisHost);
-        jedis = new Jedis(redisHost);
-
-        redisTTLInSeconds = config.getInt("bootstrapper.redisTTLInDays") * 24 * 60 * 60;
-        log.info("Redis TTL in secs: " + redisTTLInSeconds);
-
-        queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
-        queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
+        redisUtils = new RedisUtils(config);
+        final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
+        final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
         log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days");
+        from = formatDate(queryHistoryInDays);
+        to = formatDate(queryFutureInDays);
+    }
 
+    public static String formatDate(int offsetInDays) {
+        LocalDate now = LocalDate.now();
+        LocalDate then = now.plus(offsetInDays, ChronoUnit.DAYS);
+
+        String formattedString = DateTimeFormatter.ISO_LOCAL_DATE.format(then);
+        log.debug("offsetInDays results to date " + formattedString);
+
+        return formattedString;
     }
 
     private long secondsUntilNextEvenHour() {
@@ -92,13 +96,14 @@ public class Main {
         if (!processingActive.getAndSet(true)) {
             log.info("Fetching data");
             try (Connection connection = DriverManager.getConnection(connectionString)) {
-                final QueryProcessor journeyQueryProcessor = new QueryProcessor(connection, new JourneyResultSetProcessor(jedis, redisTTLInSeconds));
-                final QueryProcessor stopQueryProcessor = new QueryProcessor(connection, new StopResultSetProcessor(jedis, redisTTLInSeconds));
-                final QueryProcessor metroJourneyQueryProcessor = new QueryProcessor(connection, new MetroJourneyResultSetProcessor(jedis, redisTTLInSeconds));
+                final QueryProcessor queryProcessor = new QueryProcessor(connection);
+                final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils, from, to);
+                final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils);
+                final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisUtils, from, to);
 
-                journeyQueryProcessor.executeQuery(QueryUtil.getJourneyQuery(queryHistoryInDays, queryFutureInDays));
-                stopQueryProcessor.executeQuery(QueryUtil.getStopQuery());
-                metroJourneyQueryProcessor.executeQuery(QueryUtil.getMetroJourneyQuery(queryHistoryInDays, queryFutureInDays));
+                queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
+                queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
+                queryProcessor.executeAndProcessQuery(metroJourneyResultSetProcessor);
 
                 log.info("All data processed, thank you.");
             }
