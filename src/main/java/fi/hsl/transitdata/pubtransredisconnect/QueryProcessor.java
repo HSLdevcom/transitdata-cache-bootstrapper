@@ -21,7 +21,7 @@ public class QueryProcessor {
     }
 
     public void executeAndProcessQuery(final AbstractResultSetProcessor processor) {
-        log.info("Starting query");
+        log.info("Starting query with result set processor {}.", processor.getClass().getName());
         long now = System.currentTimeMillis();
 
         ResultSet resultSet = null;
