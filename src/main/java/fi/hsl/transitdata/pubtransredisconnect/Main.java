@@ -280,10 +280,13 @@ public class Main {
             String joreKey = TransitdataProperties.formatJoreId(resultSet.getString(ROUTE_NAME),
                     resultSet.getString(DIRECTION), resultSet.getString(OPERATING_DAY),
                     resultSet.getString(START_TIME));
-            jedis.set(joreKey, resultSet.getString(DVJ_ID));
-            jedis.expire(joreKey, redisTTLInSeconds);
-
-            rowCounter++;
+            String response = jedis.set(joreKey, resultSet.getString(DVJ_ID));
+            if (response == null || !response.equalsIgnoreCase("OK")) {
+                log.error("Failed to set joreKey {}, Redis returned {}", joreKey, response);
+            } else {
+                jedis.expire(joreKey, redisTTLInSeconds);
+                rowCounter++;
+            }
         }
 
         log.info("Inserted " + rowCounter + " dvj keys");
