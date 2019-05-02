@@ -272,24 +272,30 @@ public class Main {
             values.put(TransitdataProperties.KEY_OPERATING_DAY, resultSet.getString(OPERATING_DAY));
 
             String key = TransitdataProperties.REDIS_PREFIX_DVJ + resultSet.getString(DVJ_ID);
-            jedis.hmset(key, values);
-            jedis.expire(key, redisTTLInSeconds);
-
-            //Insert a composite key that allows reverse lookup of the dvj id
-            //The format is route-direction-date-time
-            String joreKey = TransitdataProperties.formatJoreId(resultSet.getString(ROUTE_NAME),
-                    resultSet.getString(DIRECTION), resultSet.getString(OPERATING_DAY),
-                    resultSet.getString(START_TIME));
-            String response = jedis.set(joreKey, resultSet.getString(DVJ_ID));
+            String response = jedis.hmset(key, values);
             if (checkRedisResponse(response)) {
-                jedis.expire(joreKey, redisTTLInSeconds);
+                jedis.expire(key, redisTTLInSeconds);
                 rowCounter++;
+
+                //Insert a composite key that allows reverse lookup of the dvj id
+                //The format is route-direction-date-time
+                String joreKey = TransitdataProperties.formatJoreId(resultSet.getString(ROUTE_NAME),
+                        resultSet.getString(DIRECTION), resultSet.getString(OPERATING_DAY),
+                        resultSet.getString(START_TIME));
+                response = jedis.set(joreKey, resultSet.getString(DVJ_ID));
+                if (checkRedisResponse(response)) {
+                    jedis.expire(joreKey, redisTTLInSeconds);
+                    rowCounter++;
+                } else {
+                    log.error("Failed to set joreKey {}, Redis returned {}", joreKey, response);
+                }
             } else {
-                log.error("Failed to set joreKey {}, Redis returned {}", joreKey, response);
+                log.error("Failed to set Trip details {}, Redis returned {}", key, response);
             }
+
         }
 
-        log.info("Inserted " + rowCounter + " dvj keys");
+        log.info("Inserted " + rowCounter + " dvj and reverse-lookup keys");
     }
 
     private void handleStopResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
