@@ -281,11 +281,11 @@ public class Main {
                     resultSet.getString(DIRECTION), resultSet.getString(OPERATING_DAY),
                     resultSet.getString(START_TIME));
             String response = jedis.set(joreKey, resultSet.getString(DVJ_ID));
-            if (response == null || !response.equalsIgnoreCase("OK")) {
-                log.error("Failed to set joreKey {}, Redis returned {}", joreKey, response);
-            } else {
+            if (checkRedisResponse(response)) {
                 jedis.expire(joreKey, redisTTLInSeconds);
                 rowCounter++;
+            } else {
+                log.error("Failed to set joreKey {}, Redis returned {}", joreKey, response);
             }
         }
 
@@ -298,12 +298,19 @@ public class Main {
 
         while(resultSet.next()) {
             String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString(1);
-            jedis.setex(key, redisTTLInSeconds, resultSet.getString(2));
-
-            rowCounter++;
+            String response = jedis.setex(key, redisTTLInSeconds, resultSet.getString(2));
+            if (checkRedisResponse(response)) {
+                rowCounter++;
+            } else {
+                log.error("Failed to set stop key {}, Redis returned {}", key, response);
+            }
         }
 
         log.info("Inserted " + rowCounter + " jpp keys");
+    }
+
+    private boolean checkRedisResponse(String response) {
+        return response != null && response.equalsIgnoreCase("OK");
     }
 
 
