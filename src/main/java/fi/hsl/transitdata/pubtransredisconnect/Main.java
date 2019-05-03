@@ -311,8 +311,9 @@ public class Main {
         int redisCounter = 0;
         while(resultSet.next()) {
             rowCounter++;
-            String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString(1);
-            String response = jedis.setex(key, redisTTLInSeconds, resultSet.getString(2));
+            String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString("Gid");
+            String value = resultSet.getString("Number");
+            String response = jedis.setex(key, redisTTLInSeconds, value);
             if (checkRedisResponse(response)) {
                 redisCounter++;
             } else {
