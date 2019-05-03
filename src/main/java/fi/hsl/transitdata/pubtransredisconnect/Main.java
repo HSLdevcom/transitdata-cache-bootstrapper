@@ -257,7 +257,10 @@ public class Main {
         OffsetDateTime now = OffsetDateTime.now();
         String ts = DateTimeFormatter.ISO_INSTANT.format(now);
         log.info("Updating Redis with latest timestamp: " + ts);
-        jedis.set(TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP, ts);
+        String result = jedis.set(TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP, ts);
+        if (!checkRedisResponse(result)) {
+            log.error("Failed to update cache timestamp to Redis!");
+        }
     }
 
     private void handleJourneyResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
