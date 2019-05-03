@@ -262,9 +262,13 @@ public class Main {
 
     private void handleJourneyResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
 
+        int tripInfoCounter = 0;
+        int lookupCounter = 0;
         int rowCounter = 0;
 
         while(resultSet.next()) {
+            rowCounter++;
+
             Map<String, String> values = new HashMap<>();
             values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(ROUTE_NAME));
             values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(DIRECTION));
@@ -275,7 +279,7 @@ public class Main {
             String response = jedis.hmset(key, values);
             if (checkRedisResponse(response)) {
                 jedis.expire(key, redisTTLInSeconds);
-                rowCounter++;
+                tripInfoCounter++;
 
                 //Insert a composite key that allows reverse lookup of the dvj id
                 //The format is route-direction-date-time
@@ -285,34 +289,35 @@ public class Main {
                 response = jedis.set(joreKey, resultSet.getString(DVJ_ID));
                 if (checkRedisResponse(response)) {
                     jedis.expire(joreKey, redisTTLInSeconds);
-                    rowCounter++;
+                    lookupCounter++;
                 } else {
-                    log.error("Failed to set joreKey {}, Redis returned {}", joreKey, response);
+                    log.error("Failed to set reverse-lookup key {}, Redis returned {}", joreKey, response);
                 }
             } else {
-                log.error("Failed to set Trip details {}, Redis returned {}", key, response);
+                log.error("Failed to set Trip details for key {}, Redis returned {}", key, response);
             }
 
         }
 
-        log.info("Inserted " + rowCounter + " dvj and reverse-lookup keys");
+        log.info("Inserted {} trip info and {} reverse-lookup keys for {} DB rows", tripInfoCounter, lookupCounter, rowCounter);
     }
 
     private void handleStopResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
 
         int rowCounter = 0;
-
+        int redisCounter = 0;
         while(resultSet.next()) {
+            rowCounter++;
             String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString(1);
             String response = jedis.setex(key, redisTTLInSeconds, resultSet.getString(2));
             if (checkRedisResponse(response)) {
-                rowCounter++;
+                redisCounter++;
             } else {
                 log.error("Failed to set stop key {}, Redis returned {}", key, response);
             }
         }
 
-        log.info("Inserted " + rowCounter + " jpp keys");
+        log.info("Inserted {} redis stop id keys (jpp-id) for {} DB rows", redisCounter, rowCounter);
     }
 
     private boolean checkRedisResponse(String response) {
