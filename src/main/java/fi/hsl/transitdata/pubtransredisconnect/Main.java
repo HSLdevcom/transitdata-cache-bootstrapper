@@ -22,6 +22,7 @@ import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 
 public class Main {
 
@@ -143,7 +144,7 @@ public class Main {
         return formattedString;
     }
 
-    private void queryJourneyData(Connection connection, Jedis jedis) throws SQLException {
+    private void queryJourneyData(Connection connection, Jedis jedis) throws SQLException, JedisConnectionException {
 
         Statement statement;
         ResultSet resultSet;
@@ -200,6 +201,10 @@ public class Main {
         try {
             handleJourneyResultSet(resultSet, jedis);
         }
+        catch (JedisConnectionException e) {
+            log.error("Failed to connect to Redis while processing journeys", e);
+            throw e;
+        }
         catch (Exception e) {
             log.error("Failed to handle result set", e);
         }
@@ -216,7 +221,7 @@ public class Main {
     }
 
 
-    private void queryStopData(Connection connection, Jedis jedis) throws SQLException {
+    private void queryStopData(Connection connection, Jedis jedis) throws SQLException, JedisConnectionException {
 
         Statement statement;
         ResultSet resultSet;
@@ -237,6 +242,10 @@ public class Main {
         try {
             handleStopResultSet(resultSet, jedis);
             updateTimestamp(jedis);
+        }
+        catch (JedisConnectionException e) {
+            log.error("Failed to connect to Redis while processing stops", e);
+            throw e;
         }
         catch (Exception e) {
             log.error("Exception while handling resultset", e);
