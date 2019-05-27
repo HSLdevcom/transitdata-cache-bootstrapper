@@ -110,8 +110,15 @@ public class Main {
 
                 log.info("All data processed, thank you.");
             }
+            catch (SQLServerException sqlServerException) {
+                String msg = "SQLServerException during query, Driver Error code: "
+                        + sqlServerException.getErrorCode()
+                        + " and SQL State: " + sqlServerException.getSQLState();
+                log.error(msg, sqlServerException);
+                shutdown();
+            }
             catch (Exception e) {
-                log.error("Exception during query ", e);
+                log.error("Unknown exception during query ", e);
                 shutdown();
             }
             finally {
