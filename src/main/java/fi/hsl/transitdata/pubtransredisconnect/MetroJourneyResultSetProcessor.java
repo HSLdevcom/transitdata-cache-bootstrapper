@@ -1,7 +1,7 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
-import fi.hsl.common.gtfsrt.JoreDateTime;
 import fi.hsl.common.metro.MetroStops;
+import fi.hsl.common.transitdata.JoreDateTime;
 import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.Optional;
 
 public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
-
     private static final Logger log = LoggerFactory.getLogger(MetroJourneyResultSetProcessor.class);
 
     private String from;
@@ -33,8 +32,10 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
         int rowCounter = 0;
+        int redisCounter = 0;
 
         while (resultSet.next()) {
+            rowCounter++;
             final String operatingDay = resultSet.getString(QueryUtils.OPERATING_DAY);
             final String startTime = resultSet.getString(QueryUtils.START_TIME);
             final String dateTime = processDateTime(operatingDay, startTime);
@@ -54,15 +55,19 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
                 values.put(TransitdataProperties.KEY_START_STOP_SHORT_NAME, shortName);
 
                 String metroKey = TransitdataProperties.formatMetroId(shortName, dateTime);
-                redisUtils.setValues(metroKey, values);
-
-                rowCounter++;
+                String response = redisUtils.setValues(metroKey, values);
+                if (redisUtils.checkResponse(response)) {
+                    redisUtils.setExpire(metroKey);
+                    redisCounter++;
+                } else {
+                    log.error("Failed to set metro key {}, Redis returned {}", metroKey, response);
+                }
             } else {
                 log.warn("Failed to short name for stop number {}.", stopNumber);
             }
         }
 
-        log.info("Inserted " + rowCounter + " metro keys");
+        log.info("Inserted {} redis metro id keys for {} DB rows", redisCounter, rowCounter);
     }
 
     protected String getQuery() {

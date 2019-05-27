@@ -11,12 +11,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.microsoft.sqlserver.jdbc.SQLServerException;
 import com.typesafe.config.*;
 import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.config.ConfigUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.clients.jedis.Jedis;
 
 public class Main {
 
@@ -24,7 +24,6 @@ public class Main {
 
     Config config;
 
-    private Jedis jedis;
     private final String connectionString;
 
     private ScheduledExecutorService executor;
@@ -51,7 +50,7 @@ public class Main {
         final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
         log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days");
-        from = formatDate(queryHistoryInDays);
+        from = formatDate(-queryHistoryInDays);
         to = formatDate(queryFutureInDays);
     }
 
@@ -105,10 +104,19 @@ public class Main {
                 queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
                 queryProcessor.executeAndProcessQuery(metroJourneyResultSetProcessor);
 
+                redisUtils.updateTimestamp();
+
                 log.info("All data processed, thank you.");
             }
+            catch (SQLServerException sqlServerException) {
+                String msg = "SQLServerException during query, Driver Error code: "
+                        + sqlServerException.getErrorCode()
+                        + " and SQL State: " + sqlServerException.getSQLState();
+                log.error(msg, sqlServerException);
+                shutdown();
+            }
             catch (Exception e) {
-                log.error("Exception during query ", e);
+                log.error("Unknown exception during query ", e);
                 shutdown();
             }
             finally {
@@ -122,8 +130,8 @@ public class Main {
 
     private void shutdown() {
         log.warn("Shutting down the application.");
-        if (jedis != null) {
-            jedis.close();
+        if (redisUtils.jedis != null) {
+            redisUtils.jedis.close();
         }
         if (executor != null) {
             executor.shutdown();

@@ -2,6 +2,7 @@ package fi.hsl.transitdata.pubtransredisconnect;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -12,16 +13,15 @@ public class QueryProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(QueryProcessor.class);
 
-    private Connection connection;
-
-    public QueryProcessor() {}
+    public Connection connection;
 
     public QueryProcessor(final Connection connection) {
         this.connection = connection;
     }
 
     public void executeAndProcessQuery(final AbstractResultSetProcessor processor) {
-        log.info("Starting query with result set processor {}.", processor.getClass().getName());
+        final String processorName = processor.getClass().getName();
+        log.info("Starting query with result set processor {}.", processorName);
         long now = System.currentTimeMillis();
 
         ResultSet resultSet = null;
@@ -29,6 +29,9 @@ public class QueryProcessor {
             final String query = processor.getQuery();
             resultSet = executeQuery(query);
             processor.processResultSet(resultSet);
+        } catch (JedisConnectionException e) {
+            log.error(String.format("Failed to connect to Redis while running processor %s.", processorName), e);
+            throw e;
         } catch (Exception e) {
             log.error("Failed to process query", e);
         } finally {
@@ -37,14 +40,6 @@ public class QueryProcessor {
 
         long elapsed = (System.currentTimeMillis() - now) / 1000;
         log.info("Data handled in " + elapsed + " seconds");
-    }
-
-    public Connection getConnection() {
-        return connection;
-    }
-
-    public void setConnection(final Connection connection) {
-        this.connection = connection;
     }
 
     private ResultSet executeQuery(final String query) throws SQLException {

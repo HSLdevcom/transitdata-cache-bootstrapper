@@ -22,35 +22,49 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
     }
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
+        int tripInfoCounter = 0;
+        int lookupCounter = 0;
         int rowCounter = 0;
 
         while(resultSet.next()) {
-            Map<String, String> values = new HashMap<>();
+            rowCounter++;
+            final Map<String, String> values = new HashMap<>();
             values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(QueryUtils.ROUTE_NAME));
             values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(QueryUtils.DIRECTION));
             values.put(TransitdataProperties.KEY_START_TIME, resultSet.getString(QueryUtils.START_TIME));
             values.put(TransitdataProperties.KEY_OPERATING_DAY, resultSet.getString(QueryUtils.OPERATING_DAY));
 
-            String key = TransitdataProperties.REDIS_PREFIX_DVJ + resultSet.getString(QueryUtils.DVJ_ID);
-            redisUtils.setValues(key, values);
+            final String key = TransitdataProperties.REDIS_PREFIX_DVJ + resultSet.getString(QueryUtils.DVJ_ID);
+            String response = redisUtils.setValues(key, values);
 
-            //Insert a composite key that allows reverse lookup of the dvj id
-            //The format is route-direction-date-time
-            String joreKey = TransitdataProperties.formatJoreId(resultSet.getString(QueryUtils.ROUTE_NAME),
-                    resultSet.getString(QueryUtils.DIRECTION), resultSet.getString(QueryUtils.OPERATING_DAY),
-                    resultSet.getString(QueryUtils.START_TIME));
-            redisUtils.setValue(joreKey, resultSet.getString(QueryUtils.DVJ_ID));
+            if (redisUtils.checkResponse(response)) {
+                redisUtils.setExpire(key);
+                tripInfoCounter++;
 
-            rowCounter++;
+                //Insert a composite key that allows reverse lookup of the dvj id
+                //The format is route-direction-date-time
+                final String joreKey = TransitdataProperties.formatJoreId(resultSet.getString(QueryUtils.ROUTE_NAME),
+                        resultSet.getString(QueryUtils.DIRECTION), resultSet.getString(QueryUtils.OPERATING_DAY),
+                        resultSet.getString(QueryUtils.START_TIME));
+                response = redisUtils.setValue(joreKey, resultSet.getString(QueryUtils.DVJ_ID));
+                if (redisUtils.checkResponse(response)) {
+                    redisUtils.setExpire(joreKey);
+                    lookupCounter++;
+                } else {
+                    log.error("Failed to set reverse-lookup key {}, Redis returned {}", joreKey, response);
+                }
+            } else {
+                log.error("Failed to set Trip details for key {}, Redis returned {}", key, response);
+            }
         }
 
-        log.info("Inserted " + rowCounter + " dvj keys");
+        log.info("Inserted {} trip info and {} reverse-lookup keys for {} DB rows", tripInfoCounter, lookupCounter, rowCounter);
     }
 
     protected String getQuery() {
         String query = new StringBuilder()
                 .append("SELECT ")
-                .append("   CONVERT(CHAR(16), DVJ.Id) AS " + QueryUtils.DVJ_ID + ", ")
+                .append("   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS " + QueryUtils.DVJ_ID + ", ")
                 .append("   KVV.StringValue AS " + QueryUtils.ROUTE_NAME + ", ")
                 .append("   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS " + QueryUtils.DIRECTION + ", ")
                 .append("   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + QueryUtils.OPERATING_DAY + ", ")
