@@ -5,7 +5,6 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.time.temporal.TemporalUnit;
 import java.util.*;
 import java.io.File;
 import java.sql.*;
@@ -18,6 +17,8 @@ import com.microsoft.sqlserver.jdbc.*;
 import com.typesafe.config.Config;
 import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.config.ConfigUtils;
+import fi.hsl.common.pulsar.PulsarApplication;
+import fi.hsl.common.pulsar.PulsarApplicationContext;
 import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,7 @@ public class Main {
 
     Config config;
 
+    private PulsarApplicationContext context;
     private Jedis jedis;
     private final String connectionString;
 
@@ -46,24 +48,28 @@ public class Main {
     private int queryFutureInDays;
     private int queryHistoryInDays;
 
-    public Main(Config config, String connectionString) {
-        this.config = config;
+    public Main(PulsarApplicationContext context, String connectionString) {
+        this.context = context;
+        this.config = context.getConfig();
         this.connectionString = connectionString;
     }
 
-    public void start() {
+    public void start() throws Exception {
         initialize();
 
         startPolling();
         //Invoke manually the first task immediately
         process();
 
+        // Block main thread in order to keep PulsarApplication alive
+        // TODO: Refactor
+        while (true) {
+            Thread.sleep(Long.MAX_VALUE);
+        }
     }
 
     private void initialize() {
-        final String redisHost = config.getString("redis.host");
-        log.info("Connecting to redis at " + redisHost);
-        jedis = new Jedis(redisHost);
+        jedis = context.getJedis();
 
         redisTTLInSeconds = config.getInt("bootstrapper.redisTTLInDays") * 24 * 60 * 60;
         log.info("Redis TTL in secs: " + redisTTLInSeconds);
@@ -71,7 +77,6 @@ public class Main {
         queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
         log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days");
-
     }
 
     private long secondsUntilNextEvenHour() {
@@ -152,7 +157,6 @@ public class Main {
     }
 
     private void queryJourneyData(Connection connection, Jedis jedis) throws SQLException, JedisConnectionException {
-
         Statement statement;
         ResultSet resultSet;
 
@@ -224,12 +228,10 @@ public class Main {
         if (statement != null)  try { statement.close(); } catch (Exception e) {
             log.error("Exception while closing statement", e);
         }
-
     }
 
 
     private void queryStopData(Connection connection, Jedis jedis) throws SQLException, JedisConnectionException {
-
         Statement statement;
         ResultSet resultSet;
 
@@ -266,7 +268,6 @@ public class Main {
         if (statement != null)  try { statement.close(); } catch (Exception e) {
             log.error("Exception while closing statement", e);
         }
-
     }
 
     void updateTimestamp(Jedis jedis) {
@@ -280,7 +281,6 @@ public class Main {
     }
 
     private void handleJourneyResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
-
         int tripInfoCounter = 0;
         int lookupCounter = 0;
         int rowCounter = 0;
@@ -315,14 +315,11 @@ public class Main {
             } else {
                 log.error("Failed to set Trip details for key {}, Redis returned {}", key, response);
             }
-
         }
-
         log.info("Inserted {} trip info and {} reverse-lookup keys for {} DB rows", tripInfoCounter, lookupCounter, rowCounter);
     }
 
     private void handleStopResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
-
         int rowCounter = 0;
         int redisCounter = 0;
         while(resultSet.next()) {
@@ -336,7 +333,6 @@ public class Main {
                 log.error("Failed to set stop key {}, Redis returned {}", key, response);
             }
         }
-
         log.info("Inserted {} redis stop id keys (jpp-id) for {} DB rows", redisCounter, rowCounter);
     }
 
@@ -364,8 +360,13 @@ public class Main {
         }
         Config config = ConfigParser.createConfig();
 
-        Main app = new Main(config, connectionString);
-        app.start();
+        try (PulsarApplication app = PulsarApplication.newInstance(config)) {
+            PulsarApplicationContext context = app.getContext();
+            Main main = new Main(context, connectionString);
+            main.start();
+        } catch (Exception e) {
+            log.error("Exception at main", e);
+        }
     }
 
 }
