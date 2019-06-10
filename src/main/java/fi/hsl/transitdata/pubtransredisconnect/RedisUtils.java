@@ -1,6 +1,7 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
 import com.typesafe.config.Config;
+import fi.hsl.common.pulsar.PulsarApplicationContext;
 import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,11 +17,9 @@ public class RedisUtils {
     public Jedis jedis;
     public int redisTTLInSeconds;
 
-    public RedisUtils(final Config config) {
-        final String redisHost = config.getString("redis.host");
-        log.info("Connecting to redis at " + redisHost);
-        jedis = new Jedis(redisHost);
-
+    public RedisUtils(final PulsarApplicationContext context) {
+        final Config config = context.getConfig();
+        jedis = context.getJedis();
         redisTTLInSeconds = config.getInt("bootstrapper.redisTTLInDays") * 24 * 60 * 60;
         log.info("Redis TTL in secs: " + redisTTLInSeconds);
     }

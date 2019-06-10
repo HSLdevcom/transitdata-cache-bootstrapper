@@ -15,15 +15,17 @@ import com.microsoft.sqlserver.jdbc.SQLServerException;
 import com.typesafe.config.*;
 import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.config.ConfigUtils;
+import fi.hsl.common.pulsar.PulsarApplication;
+import fi.hsl.common.pulsar.PulsarApplicationContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class Main {
-
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
-    Config config;
+    private final Config config;
 
+    private final PulsarApplicationContext context;
     private final String connectionString;
 
     private ScheduledExecutorService executor;
@@ -33,20 +35,27 @@ public class Main {
     private String from;
     private String to;
 
-    public Main(Config config, String connectionString) {
-        this.config = config;
+    public Main(PulsarApplicationContext context, String connectionString) {
+        this.context = context;
+        this.config = context.getConfig();
         this.connectionString = connectionString;
     }
 
-    public void start() {
+    public void start() throws Exception {
         initialize();
         startPolling();
         //Invoke manually the first task immediately
         process();
+
+        // Block main thread in order to keep PulsarApplication alive
+        // TODO: Refactor
+        while (true) {
+            Thread.sleep(Long.MAX_VALUE);
+        }
     }
 
     private void initialize() {
-        redisUtils = new RedisUtils(config);
+        redisUtils = new RedisUtils(context);
         final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
         log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days");
@@ -54,23 +63,19 @@ public class Main {
         to = formatDate(queryFutureInDays);
     }
 
-    public static String formatDate(int offsetInDays) {
+    private static String formatDate(int offsetInDays) {
         LocalDate now = LocalDate.now();
         LocalDate then = now.plus(offsetInDays, ChronoUnit.DAYS);
-
         String formattedString = DateTimeFormatter.ISO_LOCAL_DATE.format(then);
         log.debug("offsetInDays results to date " + formattedString);
-
         return formattedString;
     }
 
-    private long secondsUntilNextEvenHour() {
+    private static long secondsUntilNextEvenHour() {
         OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime nextHour = now.plusHours(1);
         OffsetDateTime evenHour = nextHour.truncatedTo(ChronoUnit.HOURS);
-
         log.debug("Current time is " + now.toString() + ", next even hour is at " + evenHour.toString());
-
         return Duration.between(now, evenHour).getSeconds();
     }
 
@@ -140,7 +145,6 @@ public class Main {
     }
 
     public static void main(String[] args) {
-
         String connectionString = "";
 
         try {
@@ -158,8 +162,13 @@ public class Main {
         }
         Config config = ConfigParser.createConfig();
 
-        Main app = new Main(config, connectionString);
-        app.start();
+        try (PulsarApplication app = PulsarApplication.newInstance(config)) {
+            PulsarApplicationContext context = app.getContext();
+            Main main = new Main(context, connectionString);
+            main.start();
+        } catch (Exception e) {
+            log.error("Exception at main", e);
+        }
     }
 
 }
