@@ -109,7 +109,10 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
         LocalDate date = LocalDate.parse(operatingDay, DateTimeFormatter.BASIC_ISO_DATE);
         ZonedDateTime dateTime = ZonedDateTime.of(date, LocalTime.MIN, ZoneOffset.UTC);
         dateTime = dateTime.plus(JoreDateTime.timeStringToSeconds(startTime), ChronoUnit.SECONDS);
-        String dateTimeString = DateTimeFormatter.ISO_INSTANT.format(dateTime).replace("Z", ".000Z");
+
+        String dateTimeString = DateTimeFormatter.ISO_INSTANT.format(dateTime);
+
+        log.info("new dateTimeString " + dateTimeString);
         return dateTimeString;
     }
 }
