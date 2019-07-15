@@ -1,6 +1,5 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
-import fi.hsl.common.metro.MetroStops;
 import fi.hsl.common.transitdata.JoreDateTime;
 import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
@@ -16,7 +15,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
     private static final Logger log = LoggerFactory.getLogger(MetroJourneyResultSetProcessor.class);
@@ -40,30 +38,24 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
             final String startTime = resultSet.getString(QueryUtils.START_TIME);
             final String dateTime = processDateTime(operatingDay, startTime);
             final String stopNumber = resultSet.getString(QueryUtils.STOP_NUMBER);
-            final Optional<String> maybeShortName = MetroStops.getShortName(stopNumber);
 
-            if (maybeShortName.isPresent()) {
-                final String shortName = maybeShortName.get();
-                Map<String, String> values = new HashMap<>();
-                values.put(TransitdataProperties.KEY_DVJ_ID, resultSet.getString(QueryUtils.DVJ_ID));
-                values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(QueryUtils.ROUTE_NAME));
-                values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(QueryUtils.DIRECTION));
-                values.put(TransitdataProperties.KEY_START_TIME, startTime);
-                values.put(TransitdataProperties.KEY_OPERATING_DAY, operatingDay);
-                values.put(TransitdataProperties.KEY_START_DATETIME, dateTime);
-                values.put(TransitdataProperties.KEY_START_STOP_NUMBER, stopNumber);
-                values.put(TransitdataProperties.KEY_START_STOP_SHORT_NAME, shortName);
+            Map<String, String> values = new HashMap<>();
+            // remove fields that can be queried from MQTT
+            values.put(TransitdataProperties.KEY_DVJ_ID, resultSet.getString(QueryUtils.DVJ_ID));
+            values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(QueryUtils.ROUTE_NAME));
+            values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(QueryUtils.DIRECTION));
+            values.put(TransitdataProperties.KEY_START_TIME, startTime);
+            values.put(TransitdataProperties.KEY_OPERATING_DAY, operatingDay);
+            values.put(TransitdataProperties.KEY_START_DATETIME, dateTime);
+            values.put(TransitdataProperties.KEY_START_STOP_NUMBER, stopNumber);
 
-                String metroKey = TransitdataProperties.formatMetroId(shortName, dateTime);
-                String response = redisUtils.setValues(metroKey, values);
-                if (redisUtils.checkResponse(response)) {
-                    redisUtils.setExpire(metroKey);
-                    redisCounter++;
-                } else {
-                    log.error("Failed to set metro key {}, Redis returned {}", metroKey, response);
-                }
+            String metroKey = TransitdataProperties.formatMetroId(stopNumber, dateTime);
+            String response = redisUtils.setValues(metroKey, values);
+            if (redisUtils.checkResponse(response)) {
+                redisUtils.setExpire(metroKey);
+                redisCounter++;
             } else {
-                log.warn("Failed to short name for stop number {}.", stopNumber);
+                log.error("Failed to set metro key {}, Redis returned {}", metroKey, response);
             }
         }
 
