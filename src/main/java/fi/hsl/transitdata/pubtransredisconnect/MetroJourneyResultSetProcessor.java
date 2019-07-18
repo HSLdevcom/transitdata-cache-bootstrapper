@@ -104,7 +104,6 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
 
         String dateTimeString = DateTimeFormatter.ISO_INSTANT.format(dateTime);
 
-        log.info("new dateTimeString " + dateTimeString);
         return dateTimeString;
     }
 }
