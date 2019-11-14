@@ -1,8 +1,6 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
-import java.time.Duration;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -13,40 +11,29 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.microsoft.sqlserver.jdbc.*;
-import com.typesafe.config.Config;
+import com.microsoft.sqlserver.jdbc.SQLServerException;
+import com.typesafe.config.*;
 import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.config.ConfigUtils;
 import fi.hsl.common.pulsar.PulsarApplication;
 import fi.hsl.common.pulsar.PulsarApplicationContext;
-import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.exceptions.JedisConnectionException;
 
 public class Main {
-
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
-    private static final String DVJ_ID = "dvj_id";
-    private static final String DIRECTION = "direction";
-    private static final String ROUTE_NAME = "route";
-    private static final String START_TIME = "start_time";
-    private static final String OPERATING_DAY = "operating_day";
+    private final Config config;
 
-    Config config;
-
-    private PulsarApplicationContext context;
-    private Jedis jedis;
+    private final PulsarApplicationContext context;
     private final String connectionString;
 
     private ScheduledExecutorService executor;
     private AtomicBoolean processingActive = new AtomicBoolean(false);
 
-    private int redisTTLInSeconds;
-    private int queryFutureInDays;
-    private int queryHistoryInDays;
+    private RedisUtils redisUtils;
+    private String from;
+    private String to;
 
     public Main(PulsarApplicationContext context, String connectionString) {
         this.context = context;
@@ -56,7 +43,6 @@ public class Main {
 
     public void start() throws Exception {
         initialize();
-
         startPolling();
         //Invoke manually the first task immediately
         process();
@@ -69,23 +55,27 @@ public class Main {
     }
 
     private void initialize() {
-        jedis = context.getJedis();
-
-        redisTTLInSeconds = config.getInt("bootstrapper.redisTTLInDays") * 24 * 60 * 60;
-        log.info("Redis TTL in secs: " + redisTTLInSeconds);
-
-        queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
-        queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
+        redisUtils = new RedisUtils(context);
+        final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
+        final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
         log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days");
+        from = formatDate(-queryHistoryInDays);
+        to = formatDate(queryFutureInDays);
     }
 
-    private long secondsUntilNextEvenHour() {
+    private static String formatDate(int offsetInDays) {
+        LocalDate now = LocalDate.now();
+        LocalDate then = now.plus(offsetInDays, ChronoUnit.DAYS);
+        String formattedString = DateTimeFormatter.ISO_LOCAL_DATE.format(then);
+        log.debug("offsetInDays results to date " + formattedString);
+        return formattedString;
+    }
+
+    private static long secondsUntilNextEvenHour() {
         OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime nextHour = now.plusHours(1);
         OffsetDateTime evenHour = nextHour.truncatedTo(ChronoUnit.HOURS);
-
         log.debug("Current time is " + now.toString() + ", next even hour is at " + evenHour.toString());
-
         return Duration.between(now, evenHour).getSeconds();
     }
 
@@ -110,8 +100,16 @@ public class Main {
         if (!processingActive.getAndSet(true)) {
             log.info("Fetching data");
             try (Connection connection = DriverManager.getConnection(connectionString)) {
-                queryJourneyData(connection, jedis);
-                queryStopData(connection, jedis);
+                final QueryProcessor queryProcessor = new QueryProcessor(connection);
+                final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils, from, to);
+                final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils);
+                final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisUtils, from, to);
+
+                queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
+                queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
+                queryProcessor.executeAndProcessQuery(metroJourneyResultSetProcessor);
+
+                redisUtils.updateTimestamp();
 
                 log.info("All data processed, thank you.");
             }
@@ -137,8 +135,8 @@ public class Main {
 
     private void shutdown() {
         log.warn("Shutting down the application.");
-        if (jedis != null) {
-            jedis.close();
+        if (redisUtils.jedis != null) {
+            redisUtils.jedis.close();
         }
         if (executor != null) {
             executor.shutdown();
@@ -146,203 +144,7 @@ public class Main {
         log.info("Shutdown completed, bye.");
     }
 
-    private String formatDate(int offsetInDays) {
-        LocalDate now = LocalDate.now();
-        LocalDate then = now.plus(offsetInDays, ChronoUnit.DAYS);
-
-        String formattedString = DateTimeFormatter.ISO_LOCAL_DATE.format(then);
-        log.debug("offsetInDays results to date " + formattedString);
-
-        return formattedString;
-    }
-
-    private void queryJourneyData(Connection connection, Jedis jedis) throws SQLException, JedisConnectionException {
-        Statement statement;
-        ResultSet resultSet;
-
-        final String from = formatDate(-queryHistoryInDays);
-        final String to = formatDate(queryFutureInDays);
-
-        String selectSql = new StringBuilder()
-                .append("SELECT ")
-                .append(" CONVERT(CHAR(16), DVJ.Id) AS " + DVJ_ID + ",")
-                .append(" KVV.StringValue AS " + ROUTE_NAME + ",")
-                .append(" SUBSTRING(")
-                .append("    CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid),")
-                .append("       12,")
-                .append("       1")
-                .append("   ) AS " + DIRECTION + ",")
-                .append(" CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + OPERATING_DAY + ", ")
-                .append(" RIGHT('0' + (CONVERT(VARCHAR(2), (DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime)))), 2) ")
-                .append(" + ':' + RIGHT('0' + CONVERT(VARCHAR(2), ((DATEDIFF(MINUTE, '1900-01-01', PlannedStartOffsetDateTime))")
-                .append("- ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS " + START_TIME + " ")
-                .append(" FROM")
-                .append("     ptDOI4_Community.dbo.DatedVehicleJourney AS DVJ,")
-                .append("     ptDOI4_Community.dbo.VehicleJourney AS VJ,")
-                .append("     ptDOI4_Community.dbo.VehicleJourneyTemplate AS VJT,")
-                .append("     ptDOI4_Community.T.KeyVariantValue AS KVV,")
-                .append("     ptDOI4_Community.dbo.KeyType AS KT,")
-                .append("     ptDOI4_Community.dbo.KeyVariantType AS KVT,")
-                .append("     ptDOI4_Community.dbo.ObjectType AS OT")
-                .append(" WHERE")
-                .append("     DVJ.IsBasedOnVehicleJourneyId = VJ.Id")
-                .append("     AND DVJ.IsBasedOnVehicleJourneyTemplateId = VJT.Id")
-                .append("     AND (")
-                .append("         KT.Name = 'JoreIdentity'")
-                .append("         OR KT.Name = 'JoreRouteIdentity'")
-                .append("         OR KT.Name = 'RouteName'")
-                .append("     )")
-                .append("     AND KT.ExtendsObjectTypeNumber = OT.Number")
-                .append("     AND OT.Name = 'VehicleJourney'")
-                .append("     AND KT.Id = KVT.IsForKeyTypeId")
-                .append("     AND KVT.Id = KVV.IsOfKeyVariantTypeId")
-                .append("     AND KVV.IsForObjectId = VJ.Id")
-                .append("     AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL")
-                .append("     AND DVJ.OperatingDayDate >= '" + from + "'")
-                .append("     AND DVJ.OperatingDayDate < '" + to + "'")
-                .append("     AND DVJ.IsReplacedById IS NULL")
-                .toString();
-
-        log.info("Starting journey query");
-        long now = System.currentTimeMillis();
-
-        statement = connection.createStatement();
-        resultSet = statement.executeQuery(selectSql);
-
-        try {
-            handleJourneyResultSet(resultSet, jedis);
-        }
-        catch (JedisConnectionException e) {
-            log.error("Failed to connect to Redis while processing journeys", e);
-            throw e;
-        }
-        catch (Exception e) {
-            log.error("Failed to handle result set", e);
-        }
-        long elapsed = (System.currentTimeMillis() - now) / 1000;
-        log.info("Data handled in " + elapsed + " seconds");
-
-        if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
-            log.error("Exception while closing resultset", e);
-        }
-        if (statement != null)  try { statement.close(); } catch (Exception e) {
-            log.error("Exception while closing statement", e);
-        }
-    }
-
-
-    private void queryStopData(Connection connection, Jedis jedis) throws SQLException, JedisConnectionException {
-        Statement statement;
-        ResultSet resultSet;
-
-        String selectSql = new StringBuilder()
-                .append("SELECT ")
-                .append("[Gid], [Number] ")
-                .append("FROM [ptDOI4_Community].[dbo].[JourneyPatternPoint] AS JPP ")
-                .append("GROUP BY JPP.Gid, JPP.Number")
-                .toString();
-
-        log.info("Starting stop query");
-        long now = System.currentTimeMillis();
-
-        statement = connection.createStatement();
-        resultSet = statement.executeQuery(selectSql);
-
-        try {
-            handleStopResultSet(resultSet, jedis);
-            updateTimestamp(jedis);
-        }
-        catch (JedisConnectionException e) {
-            log.error("Failed to connect to Redis while processing stops", e);
-            throw e;
-        }
-        catch (Exception e) {
-            log.error("Exception while handling resultset", e);
-        }
-        long elapsed = (System.currentTimeMillis() - now) / 1000;
-        log.info("Data handled in " + elapsed + " seconds");
-
-        if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
-            log.error("Exception while closing resultset", e);
-        }
-        if (statement != null)  try { statement.close(); } catch (Exception e) {
-            log.error("Exception while closing statement", e);
-        }
-    }
-
-    void updateTimestamp(Jedis jedis) {
-        OffsetDateTime now = OffsetDateTime.now();
-        String ts = DateTimeFormatter.ISO_INSTANT.format(now);
-        log.info("Updating Redis with latest timestamp: " + ts);
-        String result = jedis.set(TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP, ts);
-        if (!checkRedisResponse(result)) {
-            log.error("Failed to update cache timestamp to Redis!");
-        }
-    }
-
-    private void handleJourneyResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
-        int tripInfoCounter = 0;
-        int lookupCounter = 0;
-        int rowCounter = 0;
-
-        while(resultSet.next()) {
-            rowCounter++;
-
-            Map<String, String> values = new HashMap<>();
-            values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(ROUTE_NAME));
-            values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(DIRECTION));
-            values.put(TransitdataProperties.KEY_START_TIME, resultSet.getString(START_TIME));
-            values.put(TransitdataProperties.KEY_OPERATING_DAY, resultSet.getString(OPERATING_DAY));
-
-            String key = TransitdataProperties.REDIS_PREFIX_DVJ + resultSet.getString(DVJ_ID);
-            String response = jedis.hmset(key, values);
-            if (checkRedisResponse(response)) {
-                jedis.expire(key, redisTTLInSeconds);
-                tripInfoCounter++;
-
-                //Insert a composite key that allows reverse lookup of the dvj id
-                //The format is route-direction-date-time
-                String joreKey = TransitdataProperties.formatJoreId(resultSet.getString(ROUTE_NAME),
-                        resultSet.getString(DIRECTION), resultSet.getString(OPERATING_DAY),
-                        resultSet.getString(START_TIME));
-                response = jedis.set(joreKey, resultSet.getString(DVJ_ID));
-                if (checkRedisResponse(response)) {
-                    jedis.expire(joreKey, redisTTLInSeconds);
-                    lookupCounter++;
-                } else {
-                    log.error("Failed to set reverse-lookup key {}, Redis returned {}", joreKey, response);
-                }
-            } else {
-                log.error("Failed to set Trip details for key {}, Redis returned {}", key, response);
-            }
-        }
-        log.info("Inserted {} trip info and {} reverse-lookup keys for {} DB rows", tripInfoCounter, lookupCounter, rowCounter);
-    }
-
-    private void handleStopResultSet(ResultSet resultSet, Jedis jedis) throws Exception {
-        int rowCounter = 0;
-        int redisCounter = 0;
-        while(resultSet.next()) {
-            rowCounter++;
-            String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString("Gid");
-            String value = resultSet.getString("Number");
-            String response = jedis.setex(key, redisTTLInSeconds, value);
-            if (checkRedisResponse(response)) {
-                redisCounter++;
-            } else {
-                log.error("Failed to set stop key {}, Redis returned {}", key, response);
-            }
-        }
-        log.info("Inserted {} redis stop id keys (jpp-id) for {} DB rows", redisCounter, rowCounter);
-    }
-
-    private boolean checkRedisResponse(String response) {
-        return response != null && response.equalsIgnoreCase("OK");
-    }
-
-
     public static void main(String[] args) {
-
         String connectionString = "";
 
         try {
