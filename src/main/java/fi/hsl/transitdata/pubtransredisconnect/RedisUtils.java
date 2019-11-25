@@ -25,24 +25,32 @@ public class RedisUtils {
     }
 
     public String setValue(final String key, final String value) {
-        return jedis.setex(key, redisTTLInSeconds, value);
+        synchronized (jedis) {
+            return jedis.setex(key, redisTTLInSeconds, value);
+        }
     }
 
     public String setValues(final String key, final Map<String, String> values) {
-        return jedis.hmset(key, values);
+        synchronized (jedis) {
+            return jedis.hmset(key, values);
+        }
     }
 
     public Long setExpire(final String key) {
-        return jedis.expire(key, redisTTLInSeconds);
+        synchronized (jedis) {
+            return jedis.expire(key, redisTTLInSeconds);
+        }
     }
 
     public void updateTimestamp() {
-        final OffsetDateTime now = OffsetDateTime.now();
-        final String ts = DateTimeFormatter.ISO_INSTANT.format(now);
-        log.info("Updating Redis with latest timestamp: " + ts);
-        final String result = jedis.set(TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP, ts);
-        if (!checkResponse(result)) {
-            log.error("Failed to update cache timestamp to Redis!");
+        synchronized (jedis) {
+            final OffsetDateTime now = OffsetDateTime.now();
+            final String ts = DateTimeFormatter.ISO_INSTANT.format(now);
+            log.info("Updating Redis with latest timestamp: " + ts);
+            final String result = jedis.set(TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP, ts);
+            if (!checkResponse(result)) {
+                log.error("Failed to update cache timestamp to Redis!");
+            }
         }
     }
 
