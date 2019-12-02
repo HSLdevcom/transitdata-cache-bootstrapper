@@ -10,8 +10,8 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(StopResultSetProcessor.class);
 
-    public StopResultSetProcessor(final RedisUtils redisUtils) {
-        super(redisUtils);
+    public StopResultSetProcessor(final RedisUtils redisUtils, final QueryUtils queryUtils) {
+        super(redisUtils, queryUtils);
     }
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
