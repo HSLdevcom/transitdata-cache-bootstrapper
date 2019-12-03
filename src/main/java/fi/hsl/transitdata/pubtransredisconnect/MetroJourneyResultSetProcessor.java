@@ -19,13 +19,8 @@ import java.util.Map;
 public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
     private static final Logger log = LoggerFactory.getLogger(MetroJourneyResultSetProcessor.class);
 
-    private String from;
-    private String to;
-
-    public MetroJourneyResultSetProcessor(final RedisUtils redisUtils, final String from, final String to) {
-        super(redisUtils);
-        this.from = from;
-        this.to = to;
+    public MetroJourneyResultSetProcessor(final RedisUtils redisUtils, final QueryUtils queryUtils) {
+        super(redisUtils, queryUtils);
     }
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
@@ -34,16 +29,16 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
 
         while (resultSet.next()) {
             rowCounter++;
-            final String operatingDay = resultSet.getString(QueryUtils.OPERATING_DAY);
-            final String startTime = resultSet.getString(QueryUtils.START_TIME);
+            final String operatingDay = resultSet.getString(queryUtils.OPERATING_DAY);
+            final String startTime = resultSet.getString(queryUtils.START_TIME);
             final String dateTime = processDateTime(operatingDay, startTime);
-            final String stopNumber = resultSet.getString(QueryUtils.STOP_NUMBER);
+            final String stopNumber = resultSet.getString(queryUtils.STOP_NUMBER);
 
             Map<String, String> values = new HashMap<>();
             // remove fields that can be queried from MQTT
-            values.put(TransitdataProperties.KEY_DVJ_ID, resultSet.getString(QueryUtils.DVJ_ID));
-            values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(QueryUtils.ROUTE_NAME));
-            values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(QueryUtils.DIRECTION));
+            values.put(TransitdataProperties.KEY_DVJ_ID, resultSet.getString(queryUtils.DVJ_ID));
+            values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(queryUtils.ROUTE_NAME));
+            values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(queryUtils.DIRECTION));
             values.put(TransitdataProperties.KEY_START_TIME, startTime);
             values.put(TransitdataProperties.KEY_OPERATING_DAY, operatingDay);
             values.put(TransitdataProperties.KEY_START_DATETIME, dateTime);
@@ -65,14 +60,14 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
     protected String getQuery() {
         String query = new StringBuilder()
                 .append("SELECT ")
-                .append("   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS " + QueryUtils.DVJ_ID + ", ")
-                .append("   KVV.StringValue AS " + QueryUtils.ROUTE_NAME + ", ")
-                .append("   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS " + QueryUtils.DIRECTION + ", ")
-                .append("   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + QueryUtils.OPERATING_DAY + ", ")
+                .append("   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS " + queryUtils.DVJ_ID + ", ")
+                .append("   KVV.StringValue AS " + queryUtils.ROUTE_NAME + ", ")
+                .append("   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS " + queryUtils.DIRECTION + ", ")
+                .append("   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + queryUtils.OPERATING_DAY + ", ")
                 .append("   RIGHT('0' + (CONVERT(VARCHAR(2), (DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime)))), 2) ")
                 .append("       + ':' + RIGHT('0' + CONVERT(VARCHAR(2), ((DATEDIFF(MINUTE, '1900-01-01', PlannedStartOffsetDateTime)) ")
-                .append("       - ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS " + QueryUtils.START_TIME + ", ")
-                .append("   CONVERT(CHAR(7), JPP.Number) AS " + QueryUtils.STOP_NUMBER + " ")
+                .append("       - ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS " + queryUtils.START_TIME + ", ")
+                .append("   CONVERT(CHAR(7), JPP.Number) AS " + queryUtils.STOP_NUMBER + " ")
                 .append("FROM ptDOI4_Community.dbo.DatedVehicleJourney AS DVJ ")
                 .append("LEFT JOIN ptDOI4_Community.dbo.VehicleJourney AS VJ ON (DVJ.IsBasedOnVehicleJourneyId = VJ.Id) ")
                 .append("LEFT JOIN ptDOI4_Community.dbo.VehicleJourneyTemplate AS VJT ON (DVJ.IsBasedOnVehicleJourneyTemplateId = VJT.Id) ")
@@ -89,8 +84,8 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
                 .append("   ) ")
                 .append("   AND OT.Name = 'VehicleJourney' ")
                 .append("   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL ")
-                .append("   AND DVJ.OperatingDayDate >= '" + from + "' ")
-                .append("   AND DVJ.OperatingDayDate < '" + to + "' ")
+                .append("   AND DVJ.OperatingDayDate >= '" + queryUtils.from + "' ")
+                .append("   AND DVJ.OperatingDayDate < '" + queryUtils.to + "' ")
                 .append("   AND DVJ.IsReplacedById IS NULL ")
                 .append("   AND VJT.TransportModeCode = 'METRO' ")
                 .toString();

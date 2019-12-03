@@ -32,8 +32,7 @@ public class Main {
     private AtomicBoolean processingActive = new AtomicBoolean(false);
 
     private RedisUtils redisUtils;
-    private String from;
-    private String to;
+    private QueryUtils queryUtils;
 
     public Main(PulsarApplicationContext context, String connectionString) {
         this.context = context;
@@ -59,16 +58,7 @@ public class Main {
         final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
         log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days");
-        from = formatDate(-queryHistoryInDays);
-        to = formatDate(queryFutureInDays);
-    }
-
-    private static String formatDate(int offsetInDays) {
-        LocalDate now = LocalDate.now();
-        LocalDate then = now.plus(offsetInDays, ChronoUnit.DAYS);
-        String formattedString = DateTimeFormatter.ISO_LOCAL_DATE.format(then);
-        log.debug("offsetInDays results to date " + formattedString);
-        return formattedString;
+        queryUtils = new QueryUtils(queryHistoryInDays, queryFutureInDays);
     }
 
     private static long secondsUntilNextEvenHour() {
@@ -88,6 +78,7 @@ public class Main {
             @Override
             public void run() {
                 log.info("Poll timer tick");
+                queryUtils.updateFromToDates();
                 process();
             }
         };
@@ -101,9 +92,9 @@ public class Main {
             log.info("Fetching data");
             try (Connection connection = DriverManager.getConnection(connectionString)) {
                 final QueryProcessor queryProcessor = new QueryProcessor(connection);
-                final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils, from, to);
-                final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils);
-                final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisUtils, from, to);
+                final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils, queryUtils);
+                final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils, queryUtils);
+                final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisUtils, queryUtils);
 
                 queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
                 queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
