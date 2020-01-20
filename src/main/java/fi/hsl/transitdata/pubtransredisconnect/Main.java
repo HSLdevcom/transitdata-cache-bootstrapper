@@ -34,13 +34,32 @@ public class Main {
     private RedisUtils redisUtils;
     private QueryUtils queryUtils;
 
+    private final int UNHEALTHY_UPDATE_INTERVAL_SECS;
+    private long lastUpdateTime;
+
     public Main(PulsarApplicationContext context, String connectionString) {
         this.context = context;
         this.config = context.getConfig();
         this.connectionString = connectionString;
+        this.UNHEALTHY_UPDATE_INTERVAL_SECS = config.getInt("application.unhealthyUpdateIntervalSecs");
+        this.lastUpdateTime = System.currentTimeMillis();
+    }
+
+    final boolean lastUpdateTimeHealthy() {
+        long updateIntervalMillis = System.currentTimeMillis() - lastUpdateTime;
+        long intervalSecs = Math.round((double) updateIntervalMillis/1000);
+        if (intervalSecs > UNHEALTHY_UPDATE_INTERVAL_SECS) {
+            log.error("Exceeded UNHEALTHY_UPDATE_INTERVAL_SECS threshold: {} s with interval of {} s",
+                    UNHEALTHY_UPDATE_INTERVAL_SECS, intervalSecs);
+            return false;
+        }
+        return true;
     }
 
     public void start() throws Exception {
+        if (context.getHealthServer() != null) {
+            context.getHealthServer().addCheck(() -> lastUpdateTimeHealthy() );
+        }
         initialize();
         startPolling();
         //Invoke manually the first task immediately
@@ -102,6 +121,7 @@ public class Main {
 
                 redisUtils.updateTimestamp();
 
+                lastUpdateTime = System.currentTimeMillis();
                 log.info("All data processed, thank you.");
             }
             catch (SQLServerException sqlServerException) {
