@@ -160,9 +160,7 @@ public class Main {
 
         try {
             //Default path is what works with Docker out-of-the-box. Override with a local file if needed
-            final String secretFilePath = ConfigUtils.getEnv("FILEPATH_CONNECTION_STRING").orElse("/run/secrets/pubtrans_community_conn_string");
-            connectionString = new Scanner(new File(secretFilePath))
-                    .useDelimiter("\\Z").next();
+            connectionString = System.getenv("TRANSITDATA_PUBTRANS_CONN_STRING");
         } catch (Exception e) {
             log.error("Failed to read the DB connection string from the file", e);
         }

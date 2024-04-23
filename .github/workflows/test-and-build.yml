@@ -60,3 +60,22 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           tag_semver: true
+  build-aks-dev-docker-image:
+    needs: test
+    runs-on: ubuntu-latest
+    # Run only on aks-dev branch
+    if: github.ref == 'refs/heads/aks-dev'
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download .jar file
+        uses: actions/download-artifact@v2
+        with:
+          name: transitdata-cache-bootstrapper.jar
+          path: target
+      - name: Build and publish aks-dev Docker image
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: hsldevcom/transitdata-cache-bootstrapper
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          tags: aks-dev
