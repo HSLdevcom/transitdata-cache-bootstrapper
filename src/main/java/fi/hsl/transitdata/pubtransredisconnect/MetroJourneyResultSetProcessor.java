@@ -13,7 +13,9 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
@@ -26,6 +28,7 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
     public void processResultSet(final ResultSet resultSet) throws Exception {
         int rowCounter = 0;
         int redisCounter = 0;
+        List<String> metroKeys = new ArrayList<>();
 
         while (resultSet.next()) {
             rowCounter++;
@@ -45,6 +48,7 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
             values.put(TransitdataProperties.KEY_START_STOP_NUMBER, stopNumber);
 
             String metroKey = TransitdataProperties.formatMetroId(stopNumber, dateTime);
+            metroKeys.add(metroKey);
             String response = redisUtils.setValues(metroKey, values);
             if (redisUtils.checkResponse(response)) {
                 redisUtils.setExpire(metroKey);
@@ -55,6 +59,7 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
         }
 
         log.info("Inserted {} redis metro id keys for {} DB rows", redisCounter, rowCounter);
+        log.info("Metro keys: " + metroKeys);
     }
 
     protected String getQuery() {
