@@ -27,8 +27,11 @@ public class QueryProcessor {
         ResultSet resultSet = null;
         try {
             final String query = processor.getQuery();
+            log.info("Executing query... {}", now);
             resultSet = executeQuery(query);
+            log.info("Processing result set... {}", now);
             processor.processResultSet(resultSet);
+            log.info("Query processed. {}", now);
         } catch (JedisConnectionException e) {
             log.error(String.format("Failed to connect to Redis while running processor %s.", processorName), e);
             throw e;
