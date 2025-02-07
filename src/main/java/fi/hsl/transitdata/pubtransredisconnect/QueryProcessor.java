@@ -21,8 +21,8 @@ public class QueryProcessor {
 
     public void executeAndProcessQuery(final AbstractResultSetProcessor processor) {
         final String processorName = processor.getClass().getName();
-        log.info("Starting query with result set processor {}.", processorName);
         long now = System.currentTimeMillis();
+        log.info("Starting query with result set processor {}. {}", processorName, now);
 
         ResultSet resultSet = null;
         try {
@@ -35,7 +35,7 @@ public class QueryProcessor {
         } catch (Exception e) {
             log.error("Failed to process query", e);
         } finally {
-            closeQuery(resultSet);
+            closeQuery(resultSet, now);
         }
 
         long elapsed = (System.currentTimeMillis() - now) / 1000;
@@ -48,15 +48,21 @@ public class QueryProcessor {
         return resultSet;
     }
 
-    private static void closeQuery(final ResultSet resultSet) {
+    private static void closeQuery(final ResultSet resultSet, long now) {
         Statement statement = null;
         try { statement = resultSet.getStatement(); } catch (Exception e) {
             log.error("Failed to get Statement", e);
         }
-        if (resultSet != null)  try { resultSet.close(); } catch (Exception e) {
+        if (resultSet != null)  try {
+            resultSet.close();
+            log.info("ResultSet closed. {}", now);
+        } catch (Exception e) {
             log.error("Failed to close ResultSet", e);
         }
-        if (statement != null)  try { statement.close(); } catch (Exception e) {
+        if (statement != null)  try {
+            statement.close();
+            log.info("Statement closed. {}", now);
+        } catch (Exception e) {
             log.error("Failed to close Statement", e);
         }
     }
