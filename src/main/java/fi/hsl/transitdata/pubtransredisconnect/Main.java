@@ -1,10 +1,8 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
 import java.time.*;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.io.File;
 import java.sql.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -14,9 +12,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.microsoft.sqlserver.jdbc.SQLServerException;
 import com.typesafe.config.*;
 import fi.hsl.common.config.ConfigParser;
-import fi.hsl.common.config.ConfigUtils;
 import fi.hsl.common.pulsar.PulsarApplication;
 import fi.hsl.common.pulsar.PulsarApplicationContext;
+import fi.hsl.transitdata.pubtransredisconnect.processor.JourneyResultSetProcessor;
+import fi.hsl.transitdata.pubtransredisconnect.processor.MetroJourneyResultSetProcessor;
+import fi.hsl.transitdata.pubtransredisconnect.processor.QueryProcessor;
+import fi.hsl.transitdata.pubtransredisconnect.processor.StopResultSetProcessor;
+import fi.hsl.transitdata.pubtransredisconnect.util.QueryUtils;
+import fi.hsl.transitdata.pubtransredisconnect.util.RedisUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

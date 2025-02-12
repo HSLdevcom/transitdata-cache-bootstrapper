@@ -1,4 +1,7 @@
-package fi.hsl.transitdata.pubtransredisconnect;
+package fi.hsl.transitdata.pubtransredisconnect.processor;
+
+import fi.hsl.transitdata.pubtransredisconnect.util.QueryUtils;
+import fi.hsl.transitdata.pubtransredisconnect.util.RedisUtils;
 
 import java.sql.ResultSet;
 
