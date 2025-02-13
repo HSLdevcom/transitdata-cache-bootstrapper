@@ -1,10 +1,6 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
-import java.time.*;
-import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.io.File;
 import java.sql.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -14,7 +10,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.microsoft.sqlserver.jdbc.SQLServerException;
 import com.typesafe.config.*;
 import fi.hsl.common.config.ConfigParser;
-import fi.hsl.common.config.ConfigUtils;
 import fi.hsl.common.pulsar.PulsarApplication;
 import fi.hsl.common.pulsar.PulsarApplicationContext;
 import org.slf4j.Logger;
@@ -76,21 +71,15 @@ public class Main {
         redisUtils = new RedisUtils(context);
         final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
-        log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days");
-        queryUtils = new QueryUtils(queryHistoryInDays, queryFutureInDays);
-    }
-
-    private static long secondsUntilNextEvenHour() {
-        OffsetDateTime now = OffsetDateTime.now();
-        OffsetDateTime nextHour = now.plusHours(1);
-        OffsetDateTime evenHour = nextHour.truncatedTo(ChronoUnit.HOURS);
-        log.debug("Current time is " + now.toString() + ", next even hour is at " + evenHour.toString());
-        return Duration.between(now, evenHour).getSeconds();
+        final int queryMinutesFromEvenHour = config.getInt("bootstrapper.queryMinutesFromEvenHour");
+        log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days. "
+            + queryMinutesFromEvenHour + " minutes from even hour.");
+        queryUtils = new QueryUtils(queryHistoryInDays, queryFutureInDays, queryMinutesFromEvenHour);
     }
 
     private void startPolling() {
         final long periodInSecs = 60 * 60;
-        final long delayInSecs = secondsUntilNextEvenHour();
+        final long delayInSecs = queryUtils.secondsUntilNextEvenHourPlusMinutes();
 
         log.info("Starting scheduled poll task. First poll execution in " + delayInSecs + "secs");
         TimerTask task = new TimerTask() {
