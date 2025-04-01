@@ -1,9 +1,11 @@
 package fi.hsl.transitdata.pubtransredisconnect.processor;
 
+import fi.hsl.transitdata.pubtransredisconnect.model.DatabaseQueryResult;
 import fi.hsl.transitdata.pubtransredisconnect.util.QueryUtils;
 import fi.hsl.transitdata.pubtransredisconnect.util.RedisUtils;
 
 import java.sql.ResultSet;
+import java.util.List;
 
 public abstract class AbstractResultSetProcessor {
     public RedisUtils redisUtils;
@@ -14,7 +16,9 @@ public abstract class AbstractResultSetProcessor {
         this.queryUtils = queryUtils;
     }
 
-    public abstract void processResultSet(final ResultSet resultSet) throws Exception;
-
+    public abstract List<DatabaseQueryResult> processResultSet(final ResultSet resultSet) throws Exception;
+    
+    public abstract void saveToRedis(List<DatabaseQueryResult> results);
+    
     protected abstract String getQuery();
 }

@@ -1,5 +1,6 @@
 package fi.hsl.transitdata.pubtransredisconnect.processor;
 
+import fi.hsl.transitdata.pubtransredisconnect.model.DatabaseQueryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import redis.clients.jedis.exceptions.JedisConnectionException;
@@ -8,6 +9,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 
 public class QueryProcessor {
 
@@ -25,12 +27,14 @@ public class QueryProcessor {
         log.info("Starting query with result set processor {}. {}", processorName, now);
 
         ResultSet resultSet = null;
+        List<DatabaseQueryResult> results;
         final String query = processor.getQuery();
         log.info("Executing query... {}", now);
         
         try {
             resultSet = executeQuery(query);
-        } catch (SQLException e) {
+            results = processor.processResultSet(resultSet);
+        } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
             closeQuery(resultSet, now);
@@ -39,7 +43,7 @@ public class QueryProcessor {
         
         log.info("Processing result set... {}", now);
         try {
-            processor.processResultSet(resultSet);
+            processor.saveToRedis(results);
         } catch (JedisConnectionException e) {
             log.error(String.format("Failed to connect to Redis while running processor %s.", processorName), e);
             throw e;
