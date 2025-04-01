@@ -1,10 +1,14 @@
-package fi.hsl.transitdata.pubtransredisconnect;
+package fi.hsl.transitdata.pubtransredisconnect.processor;
 
 import fi.hsl.common.transitdata.TransitdataProperties;
+import fi.hsl.transitdata.pubtransredisconnect.model.JourneyResult;
+import fi.hsl.transitdata.pubtransredisconnect.util.QueryUtils;
+import fi.hsl.transitdata.pubtransredisconnect.util.RedisUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -20,19 +24,34 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
     }
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
-        int tripInfoCounter = 0;
-        int lookupCounter = 0;
-        int rowCounter = 0;
+        ArrayList<JourneyResult> results = new ArrayList<>();
 
         while(resultSet.next()) {
-            rowCounter++;
-            final Map<String, String> values = new HashMap<>();
-            values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(queryUtils.ROUTE_NAME));
-            values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(queryUtils.DIRECTION));
-            values.put(TransitdataProperties.KEY_START_TIME, resultSet.getString(queryUtils.START_TIME));
-            values.put(TransitdataProperties.KEY_OPERATING_DAY, resultSet.getString(queryUtils.OPERATING_DAY));
+            final JourneyResult result = new JourneyResult(
+                    resultSet.getString(queryUtils.DVJ_ID),
+                    resultSet.getString(queryUtils.ROUTE_NAME),
+                    resultSet.getString(queryUtils.DIRECTION),
+                    resultSet.getString(queryUtils.START_TIME),
+                    resultSet.getString(queryUtils.OPERATING_DAY)
+            );
+            results.add(result);
+        }
 
-            final String key = TransitdataProperties.REDIS_PREFIX_DVJ + resultSet.getString(queryUtils.DVJ_ID);
+        saveToRedis(results);
+    }
+
+    private void saveToRedis(ArrayList<JourneyResult> results) {
+        int tripInfoCounter = 0;
+        int lookupCounter = 0;
+
+        for (JourneyResult result : results) {
+            Map<String, String> values = new HashMap<>();
+            values.put(TransitdataProperties.KEY_ROUTE_NAME, result.getRouteName());
+            values.put(TransitdataProperties.KEY_DIRECTION, result.getDirection());
+            values.put(TransitdataProperties.KEY_START_TIME, result.getStartTime());
+            values.put(TransitdataProperties.KEY_OPERATING_DAY, result.getOperatingDay());
+
+            final String key = TransitdataProperties.REDIS_PREFIX_DVJ + result.getDvjId();
             String response = redisUtils.setValues(key, values);
 
             if (redisUtils.checkResponse(response)) {
@@ -41,10 +60,10 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
 
                 //Insert a composite key that allows reverse lookup of the dvj id
                 //The format is route-direction-date-time
-                final String joreKey = TransitdataProperties.formatJoreId(resultSet.getString(queryUtils.ROUTE_NAME),
-                        resultSet.getString(queryUtils.DIRECTION), resultSet.getString(queryUtils.OPERATING_DAY),
-                        resultSet.getString(queryUtils.START_TIME));
-                response = redisUtils.setValue(joreKey, resultSet.getString(queryUtils.DVJ_ID));
+                final String joreKey = TransitdataProperties.formatJoreId(result.getRouteName(),
+                        result.getDirection(), result.getOperatingDay(),
+                        result.getStartTime());
+                response = redisUtils.setValue(joreKey, result.getDvjId());
                 if (redisUtils.checkResponse(response)) {
                     redisUtils.setExpire(joreKey);
                     lookupCounter++;
@@ -54,9 +73,10 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
             } else {
                 log.error("Failed to set Trip details for key {}, Redis returned {}", key, response);
             }
-        }
 
-        log.info("Inserted {} trip info and {} reverse-lookup keys for {} DB rows", tripInfoCounter, lookupCounter, rowCounter);
+            log.info("Inserted {} trip info and {} reverse-lookup keys for {} DB rows", tripInfoCounter, lookupCounter, results.size());
+
+        }
     }
 
     protected String getQuery() {
