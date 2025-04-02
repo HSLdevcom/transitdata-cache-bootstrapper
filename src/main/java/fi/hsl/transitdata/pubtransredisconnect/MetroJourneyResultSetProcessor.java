@@ -1,10 +1,7 @@
-package fi.hsl.transitdata.pubtransredisconnect.processor;
+package fi.hsl.transitdata.pubtransredisconnect;
 
 import fi.hsl.common.transitdata.JoreDateTime;
 import fi.hsl.common.transitdata.TransitdataProperties;
-import fi.hsl.transitdata.pubtransredisconnect.model.MetroJourneyResult;
-import fi.hsl.transitdata.pubtransredisconnect.util.QueryUtils;
-import fi.hsl.transitdata.pubtransredisconnect.util.RedisUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,7 +13,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -28,38 +24,27 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
     }
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
-
-        ArrayList<MetroJourneyResult> results = new ArrayList<>();
-
-        while (resultSet.next()) {
-            results.add(new MetroJourneyResult(
-                    resultSet.getString(queryUtils.DVJ_ID),
-                    resultSet.getString(queryUtils.OPERATING_DAY),
-                    resultSet.getString(queryUtils.START_TIME),
-                    resultSet.getString(queryUtils.STOP_NUMBER),
-                    resultSet.getString(queryUtils.ROUTE_NAME),
-                    resultSet.getString(queryUtils.DIRECTION)
-            ));
-        }
-
-        saveToRedis(results);
-    }
-
-    private void saveToRedis(ArrayList<MetroJourneyResult> results) {
+        int rowCounter = 0;
         int redisCounter = 0;
 
-        for (MetroJourneyResult result : results) {
+        while (resultSet.next()) {
+            rowCounter++;
+            final String operatingDay = resultSet.getString(queryUtils.OPERATING_DAY);
+            final String startTime = resultSet.getString(queryUtils.START_TIME);
+            final String dateTime = processDateTime(operatingDay, startTime);
+            final String stopNumber = resultSet.getString(queryUtils.STOP_NUMBER);
+
             Map<String, String> values = new HashMap<>();
             // remove fields that can be queried from MQTT
-            values.put(TransitdataProperties.KEY_DVJ_ID, result.getDvjId());
-            values.put(TransitdataProperties.KEY_ROUTE_NAME, result.getRouteName());
-            values.put(TransitdataProperties.KEY_DIRECTION, result.getDirection());
-            values.put(TransitdataProperties.KEY_START_TIME, result.getStartTime());
-            values.put(TransitdataProperties.KEY_OPERATING_DAY, result.getOperatingDay());
-            values.put(TransitdataProperties.KEY_START_DATETIME, result.getDateTime());
-            values.put(TransitdataProperties.KEY_START_STOP_NUMBER, result.getStopNumber());
+            values.put(TransitdataProperties.KEY_DVJ_ID, resultSet.getString(queryUtils.DVJ_ID));
+            values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(queryUtils.ROUTE_NAME));
+            values.put(TransitdataProperties.KEY_DIRECTION, resultSet.getString(queryUtils.DIRECTION));
+            values.put(TransitdataProperties.KEY_START_TIME, startTime);
+            values.put(TransitdataProperties.KEY_OPERATING_DAY, operatingDay);
+            values.put(TransitdataProperties.KEY_START_DATETIME, dateTime);
+            values.put(TransitdataProperties.KEY_START_STOP_NUMBER, stopNumber);
 
-            String metroKey = TransitdataProperties.formatMetroId(result.getStopNumber(), result.getDateTime());
+            String metroKey = TransitdataProperties.formatMetroId(stopNumber, dateTime);
             String response = redisUtils.setValues(metroKey, values);
             if (redisUtils.checkResponse(response)) {
                 redisUtils.setExpire(metroKey);
@@ -68,7 +53,8 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
                 log.error("Failed to set metro key {}, Redis returned {}", metroKey, response);
             }
         }
-        log.info("Inserted {} redis metro id keys for {} DB rows", redisCounter, results.size());
+
+        log.info("Inserted {} redis metro id keys for {} DB rows", redisCounter, rowCounter);
     }
 
     protected String getQuery() {

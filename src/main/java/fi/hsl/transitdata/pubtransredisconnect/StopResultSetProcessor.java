@@ -1,14 +1,10 @@
-package fi.hsl.transitdata.pubtransredisconnect.processor;
+package fi.hsl.transitdata.pubtransredisconnect;
 
 import fi.hsl.common.transitdata.TransitdataProperties;
-import fi.hsl.transitdata.pubtransredisconnect.model.StopResult;
-import fi.hsl.transitdata.pubtransredisconnect.util.QueryUtils;
-import fi.hsl.transitdata.pubtransredisconnect.util.RedisUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
-import java.util.ArrayList;
 
 public class StopResultSetProcessor extends AbstractResultSetProcessor {
 
@@ -19,23 +15,13 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor {
     }
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
-        ArrayList<StopResult> results = new ArrayList<>();
+        int rowCounter = 0;
+        int redisCounter = 0;
 
         while(resultSet.next()) {
-            results.add(new StopResult(
-                    resultSet.getString("Gid"),
-                    resultSet.getString("Number")
-            ));
-        }
-
-        saveToRedis(results);
-    }
-
-    private void saveToRedis(ArrayList<StopResult> results) {
-        int redisCounter = 0;
-        for (StopResult result : results) {
-            String key = TransitdataProperties.REDIS_PREFIX_JPP  + result.getGid();
-            String response = redisUtils.setValue(key, result.getNumber());
+            rowCounter++;
+            String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString("Gid");
+            String response = redisUtils.setValue(key, resultSet.getString("Number"));
             if (redisUtils.checkResponse(response)) {
                 redisCounter++;
             } else {
@@ -43,7 +29,7 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor {
             }
         }
 
-        log.info("Inserted {} redis stop id keys (jpp-id) for {} DB rows", redisCounter, results.size());
+        log.info("Inserted {} redis stop id keys (jpp-id) for {} DB rows", redisCounter, rowCounter);
     }
 
     protected String getQuery() {
