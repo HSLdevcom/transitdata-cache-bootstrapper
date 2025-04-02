@@ -1,7 +1,6 @@
 package fi.hsl.transitdata.pubtransredisconnect.processor;
 
 import fi.hsl.common.transitdata.TransitdataProperties;
-import fi.hsl.transitdata.pubtransredisconnect.model.DatabaseQueryResult;
 import fi.hsl.transitdata.pubtransredisconnect.model.JourneyResult;
 import fi.hsl.transitdata.pubtransredisconnect.util.QueryUtils;
 import fi.hsl.transitdata.pubtransredisconnect.util.RedisUtils;
@@ -11,7 +10,6 @@ import org.slf4j.LoggerFactory;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
@@ -24,10 +22,9 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
     public JourneyResultSetProcessor(final RedisUtils redisUtils, QueryUtils queryUtils) {
         super(redisUtils, queryUtils);
     }
-    
-    @Override
-    public List<DatabaseQueryResult> processResultSet(final ResultSet resultSet) throws Exception {
-        List<DatabaseQueryResult> results = new ArrayList<>();
+
+    public void processResultSet(final ResultSet resultSet) throws Exception {
+        ArrayList<JourneyResult> results = new ArrayList<>();
 
         while(resultSet.next()) {
             final JourneyResult result = new JourneyResult(
@@ -39,18 +36,16 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
             );
             results.add(result);
         }
-        
-        return results;
+
+        saveToRedis(results);
     }
-    
-    @Override
-    public void saveToRedis(List<DatabaseQueryResult> results) {
+
+    private void saveToRedis(ArrayList<JourneyResult> results) {
         int tripInfoCounter = 0;
         int lookupCounter = 0;
 
-        for (DatabaseQueryResult databaseQueryResult : results) {
+        for (JourneyResult result : results) {
             Map<String, String> values = new HashMap<>();
-            JourneyResult result = (JourneyResult) databaseQueryResult;
             values.put(TransitdataProperties.KEY_ROUTE_NAME, result.getRouteName());
             values.put(TransitdataProperties.KEY_DIRECTION, result.getDirection());
             values.put(TransitdataProperties.KEY_START_TIME, result.getStartTime());
@@ -83,8 +78,7 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
 
         }
     }
-    
-    @Override
+
     protected String getQuery() {
         String query = new StringBuilder()
                 .append("SELECT ")

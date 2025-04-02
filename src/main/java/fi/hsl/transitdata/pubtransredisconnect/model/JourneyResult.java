@@ -1,6 +1,6 @@
 package fi.hsl.transitdata.pubtransredisconnect.model;
 
-public class JourneyResult implements DatabaseQueryResult {
+public class JourneyResult {
 
     private final String dvjId;
     private final String routeName;

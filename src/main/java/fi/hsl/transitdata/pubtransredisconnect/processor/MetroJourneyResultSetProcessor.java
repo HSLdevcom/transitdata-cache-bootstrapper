@@ -2,7 +2,6 @@ package fi.hsl.transitdata.pubtransredisconnect.processor;
 
 import fi.hsl.common.transitdata.JoreDateTime;
 import fi.hsl.common.transitdata.TransitdataProperties;
-import fi.hsl.transitdata.pubtransredisconnect.model.DatabaseQueryResult;
 import fi.hsl.transitdata.pubtransredisconnect.model.MetroJourneyResult;
 import fi.hsl.transitdata.pubtransredisconnect.util.QueryUtils;
 import fi.hsl.transitdata.pubtransredisconnect.util.RedisUtils;
@@ -10,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.text.ParseException;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -20,7 +18,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
@@ -29,10 +26,10 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
     public MetroJourneyResultSetProcessor(final RedisUtils redisUtils, final QueryUtils queryUtils) {
         super(redisUtils, queryUtils);
     }
-    
-    @Override
-    public List<DatabaseQueryResult> processResultSet(final ResultSet resultSet) throws Exception {
-        ArrayList<DatabaseQueryResult> results = new ArrayList<>();
+
+    public void processResultSet(final ResultSet resultSet) throws Exception {
+
+        ArrayList<MetroJourneyResult> results = new ArrayList<>();
 
         while (resultSet.next()) {
             results.add(new MetroJourneyResult(
@@ -45,16 +42,14 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
             ));
         }
 
-        return results;
+        saveToRedis(results);
     }
-    
-    @Override
-    public void saveToRedis(List<DatabaseQueryResult> results) {
+
+    private void saveToRedis(ArrayList<MetroJourneyResult> results) {
         int redisCounter = 0;
 
-        for (DatabaseQueryResult databaseQueryResult : results) {
+        for (MetroJourneyResult result : results) {
             Map<String, String> values = new HashMap<>();
-            MetroJourneyResult result = (MetroJourneyResult) databaseQueryResult;
             // remove fields that can be queried from MQTT
             values.put(TransitdataProperties.KEY_DVJ_ID, result.getDvjId());
             values.put(TransitdataProperties.KEY_ROUTE_NAME, result.getRouteName());
@@ -75,8 +70,7 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
         }
         log.info("Inserted {} redis metro id keys for {} DB rows", redisCounter, results.size());
     }
-    
-    @Override
+
     protected String getQuery() {
         String query = new StringBuilder()
                 .append("SELECT ")

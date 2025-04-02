@@ -9,7 +9,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
-public class MetroJourneyResult implements DatabaseQueryResult {
+public class MetroJourneyResult {
 
     private final String dvjId;
     private final String operatingDay;

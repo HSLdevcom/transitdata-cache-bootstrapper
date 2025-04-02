@@ -1,7 +1,6 @@
 package fi.hsl.transitdata.pubtransredisconnect.processor;
 
 import fi.hsl.common.transitdata.TransitdataProperties;
-import fi.hsl.transitdata.pubtransredisconnect.model.DatabaseQueryResult;
 import fi.hsl.transitdata.pubtransredisconnect.model.StopResult;
 import fi.hsl.transitdata.pubtransredisconnect.util.QueryUtils;
 import fi.hsl.transitdata.pubtransredisconnect.util.RedisUtils;
@@ -10,7 +9,6 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
 import java.util.ArrayList;
-import java.util.List;
 
 public class StopResultSetProcessor extends AbstractResultSetProcessor {
 
@@ -19,10 +17,9 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor {
     public StopResultSetProcessor(final RedisUtils redisUtils, final QueryUtils queryUtils) {
         super(redisUtils, queryUtils);
     }
-    
-    @Override
-    public List<DatabaseQueryResult> processResultSet(final ResultSet resultSet) throws Exception {
-        ArrayList<DatabaseQueryResult> results = new ArrayList<>();
+
+    public void processResultSet(final ResultSet resultSet) throws Exception {
+        ArrayList<StopResult> results = new ArrayList<>();
 
         while(resultSet.next()) {
             results.add(new StopResult(
@@ -31,14 +28,12 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor {
             ));
         }
 
-        return results;
+        saveToRedis(results);
     }
-    
-    @Override
-    public void saveToRedis(List<DatabaseQueryResult> results) {
+
+    private void saveToRedis(ArrayList<StopResult> results) {
         int redisCounter = 0;
-        for (DatabaseQueryResult databaseQueryResult : results) {
-            StopResult result = (StopResult) databaseQueryResult;
+        for (StopResult result : results) {
             String key = TransitdataProperties.REDIS_PREFIX_JPP  + result.getGid();
             String response = redisUtils.setValue(key, result.getNumber());
             if (redisUtils.checkResponse(response)) {
@@ -50,8 +45,7 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor {
 
         log.info("Inserted {} redis stop id keys (jpp-id) for {} DB rows", redisCounter, results.size());
     }
-    
-    @Override
+
     protected String getQuery() {
         String query = new StringBuilder()
                 .append("SELECT ")

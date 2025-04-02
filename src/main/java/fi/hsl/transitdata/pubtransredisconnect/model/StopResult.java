@@ -1,6 +1,6 @@
 package fi.hsl.transitdata.pubtransredisconnect.model;
 
-public class StopResult implements DatabaseQueryResult {
+public class StopResult {
 
     private final String gid;
     private final String number;
