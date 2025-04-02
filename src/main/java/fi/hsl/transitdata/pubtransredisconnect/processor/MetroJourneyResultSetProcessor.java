@@ -49,22 +49,19 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
     }
     
     @Override
-    public void saveToRedis(List<DatabaseQueryResult> results) throws Exception {
+    public void saveToRedis(List<DatabaseQueryResult> results) {
         int redisCounter = 0;
 
         for (DatabaseQueryResult databaseQueryResult : results) {
             Map<String, String> values = new HashMap<>();
             MetroJourneyResult result = (MetroJourneyResult) databaseQueryResult;
-            final String operatingDay = result.getOperatingDay();
-            final String startTime = result.getStartTime();
-            final String dateTime = processDateTime(operatingDay, startTime);
             // remove fields that can be queried from MQTT
             values.put(TransitdataProperties.KEY_DVJ_ID, result.getDvjId());
             values.put(TransitdataProperties.KEY_ROUTE_NAME, result.getRouteName());
             values.put(TransitdataProperties.KEY_DIRECTION, result.getDirection());
-            values.put(TransitdataProperties.KEY_OPERATING_DAY, operatingDay);
-            values.put(TransitdataProperties.KEY_START_TIME, startTime);
-            values.put(TransitdataProperties.KEY_START_DATETIME, dateTime);
+            values.put(TransitdataProperties.KEY_START_TIME, result.getStartTime());
+            values.put(TransitdataProperties.KEY_OPERATING_DAY, result.getOperatingDay());
+            values.put(TransitdataProperties.KEY_START_DATETIME, result.getDateTime());
             values.put(TransitdataProperties.KEY_START_STOP_NUMBER, result.getStopNumber());
 
             String metroKey = TransitdataProperties.formatMetroId(result.getStopNumber(), result.getDateTime());

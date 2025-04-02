@@ -18,7 +18,7 @@ public abstract class AbstractResultSetProcessor {
 
     public abstract List<DatabaseQueryResult> processResultSet(final ResultSet resultSet) throws Exception;
     
-    public abstract void saveToRedis(List<DatabaseQueryResult> results) throws Exception;
+    public abstract void saveToRedis(List<DatabaseQueryResult> results);
     
     protected abstract String getQuery();
 }
