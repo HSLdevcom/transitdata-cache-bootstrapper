@@ -1,4 +1,4 @@
-package fi.hsl.transitdata.pubtransredisconnect.util;
+package fi.hsl.transitdata.pubtransredisconnect;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

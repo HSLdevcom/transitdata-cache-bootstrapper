@@ -1,4 +1,4 @@
-package fi.hsl.transitdata.pubtransredisconnect.util;
+package fi.hsl.transitdata.pubtransredisconnect;
 
 import com.typesafe.config.Config;
 import fi.hsl.common.pulsar.PulsarApplicationContext;

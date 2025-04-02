@@ -1,4 +1,4 @@
-package fi.hsl.transitdata.pubtransredisconnect.processor;
+package fi.hsl.transitdata.pubtransredisconnect;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,29 +25,22 @@ public class QueryProcessor {
         log.info("Starting query with result set processor {}. {}", processorName, now);
 
         ResultSet resultSet = null;
-        final String query = processor.getQuery();
-        log.info("Executing query... {}", now);
-        
         try {
+            final String query = processor.getQuery();
+            log.info("Executing query... {}", now);
             resultSet = executeQuery(query);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        } finally {
-            closeQuery(resultSet, now);
-            log.info("Query closed... {}", now);
-        }
-        
-        log.info("Processing result set... {}", now);
-        try {
+            log.info("Processing result set... {}", now);
             processor.processResultSet(resultSet);
+            log.info("Query processed. {}", now);
         } catch (JedisConnectionException e) {
             log.error(String.format("Failed to connect to Redis while running processor %s.", processorName), e);
             throw e;
         } catch (Exception e) {
-            log.error("Failed to process result set", e);
+            log.error("Failed to process query", e);
+        } finally {
+            closeQuery(resultSet, now);
         }
-        log.info("Query processed. {}", now);
-        
+
         long elapsed = (System.currentTimeMillis() - now) / 1000;
         log.info("Data handled in " + elapsed + " seconds");
     }
