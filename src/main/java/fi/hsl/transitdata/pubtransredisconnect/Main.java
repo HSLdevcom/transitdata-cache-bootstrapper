@@ -159,14 +159,29 @@ public class Main {
             System.exit(1);
         }
         Config config = ConfigParser.createConfig();
-
-        try (PulsarApplication app = PulsarApplication.newInstance(config)) {
+        
+        PulsarApplication app = null;
+        while (app == null) {
+            try {
+                app = PulsarApplication.newInstance(config);
+            } catch (Exception e) {
+                log.error("Failed to create PulsarApplication instance, retrying in 30 seconds...", e);
+                try {
+                    Thread.sleep(30 * 1000); // Wait for 30 seconds before retrying
+                } catch (InterruptedException ie) {
+                    log.error("Retry sleep interrupted", ie);
+                    Thread.currentThread().interrupt(); // Restore the interrupted status
+                }
+            }
+        }
+        
+        try {
             PulsarApplicationContext context = app.getContext();
             Main main = new Main(context, connectionString);
             main.start();
+            log.info("PulsarApplication started successfully");
         } catch (Exception e) {
             log.error("Exception at main", e);
         }
     }
-
 }
