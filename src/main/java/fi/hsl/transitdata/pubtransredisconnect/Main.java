@@ -165,9 +165,9 @@ public class Main {
             try {
                 app = PulsarApplication.newInstance(config);
             } catch (Exception e) {
-                log.error("Failed to create PulsarApplication instance, retrying in 30 seconds...", e);
+                log.info("Failed to create PulsarApplication instance, retrying in 5 seconds...", e);
                 try {
-                    Thread.sleep(30 * 1000); // Wait for 30 seconds before retrying
+                    Thread.sleep(5 * 1000); // Wait for 5 seconds before retrying
                 } catch (InterruptedException ie) {
                     log.error("Retry sleep interrupted", ie);
                     Thread.currentThread().interrupt(); // Restore the interrupted status
