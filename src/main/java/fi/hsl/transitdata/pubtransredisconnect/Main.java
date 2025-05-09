@@ -36,9 +36,8 @@ public class Main {
         redisUtils = new RedisUtils(context);
         final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
-        final int queryMinutesFromEvenHour = config.getInt("bootstrapper.queryMinutesFromEvenHour");
-        log.info("Fetching data from -{} days to +{} days. {} minutes from even hour.",
-                queryHistoryInDays, queryFutureInDays, queryMinutesFromEvenHour);
+        log.info("Fetching data from -{} days to +{} days.",
+                queryHistoryInDays, queryFutureInDays);
         queryUtils = new QueryUtils(queryHistoryInDays, queryFutureInDays);
     }
     
