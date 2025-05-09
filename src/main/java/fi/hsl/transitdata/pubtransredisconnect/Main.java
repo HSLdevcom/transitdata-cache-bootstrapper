@@ -77,12 +77,6 @@ public class Main {
             log.error(msg, sqlServerException);
         } catch (Exception e) {
             log.error("Unknown exception during query ", e);
-        } finally {
-            log.warn("Shutting down the application.");
-            if (redisUtils.jedis != null) {
-                redisUtils.jedis.close();
-            }
-            log.info("Shutdown completed, bye.");
         }
     }
 
@@ -112,6 +106,7 @@ public class Main {
             System.exit(1);
         }
         
+        log.info("Application completed successfully.");
         System.exit(0); // Exit with success code after successful execution
     }
 }
