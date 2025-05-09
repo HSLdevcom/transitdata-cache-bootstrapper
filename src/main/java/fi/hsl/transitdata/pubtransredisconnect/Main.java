@@ -109,6 +109,9 @@ public class Main {
             log.info("PulsarApplication started successfully");
         } catch (Exception e) {
             log.error("Exception at main", e);
+            System.exit(1);
         }
+        
+        System.exit(0); // Exit with success code after successful execution
     }
 }
