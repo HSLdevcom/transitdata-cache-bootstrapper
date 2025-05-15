@@ -44,12 +44,13 @@ public class Main {
     private void process() {
         log.info("Fetching data");
         try (Connection connection = DriverManager.getConnection(connectionString)) {
+            final JourneyQueryProcessor journeyQueryProcessor = new JourneyQueryProcessor(connection, queryUtils);
             final QueryProcessor queryProcessor = new QueryProcessor(connection);
             final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils, queryUtils);
             final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils, queryUtils);
             final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisUtils, queryUtils);
             
-            queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
+            journeyQueryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
             queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
             queryProcessor.executeAndProcessQuery(metroJourneyResultSetProcessor);
             
