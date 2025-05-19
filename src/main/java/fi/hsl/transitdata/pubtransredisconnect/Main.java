@@ -44,7 +44,7 @@ public class Main {
     private void process() {
         log.info("Fetching data");
         try (Connection connection = DriverManager.getConnection(connectionString)) {
-            final JourneyQueryProcessor journeyQueryProcessor = new JourneyQueryProcessor(connection, queryUtils);
+            final JourneyQueryProcessor journeyQueryProcessor = new JourneyQueryProcessor(connection, redisUtils, queryUtils);
             final QueryProcessor queryProcessor = new QueryProcessor(connection);
             final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils, queryUtils);
             final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils, queryUtils);
