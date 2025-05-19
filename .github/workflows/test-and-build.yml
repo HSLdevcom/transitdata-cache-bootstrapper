@@ -79,3 +79,22 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           tags: aks-dev
+  build-run-as-cronjob-docker-image:
+    needs: test
+    runs-on: ubuntu-latest
+    # Run only on run-as-cronjob branch
+    if: github.ref == 'refs/heads/run-as-cronjob'
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download .jar file
+        uses: actions/download-artifact@v4
+        with:
+          name: transitdata-cache-bootstrapper.jar
+          path: target
+      - name: Build and publish run-as-cronjob Docker image
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: hsldevcom/transitdata-cache-bootstrapper
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          tags: run-as-cronjob
