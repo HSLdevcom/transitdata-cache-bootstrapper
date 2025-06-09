@@ -24,7 +24,11 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
         int lookupCounter = 0;
         int rowCounter = 0;
 
-        while(resultSet.next()) {
+        while (resultSet.next()) {
+            Map<String, Map<String, String>> records = new HashMap<>();
+            // FIXME: read resultSet into records
+        }
+        for (Map<String, String> record : records) {
             rowCounter++;
             final Map<String, String> values = new HashMap<>();
             values.put(TransitdataProperties.KEY_ROUTE_NAME, resultSet.getString(queryUtils.ROUTE_NAME));
