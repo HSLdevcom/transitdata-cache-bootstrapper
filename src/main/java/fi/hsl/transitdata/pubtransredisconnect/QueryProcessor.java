@@ -44,14 +44,38 @@ public class QueryProcessor {
         long elapsed = (System.currentTimeMillis() - now) / 1000;
         log.info("Data handled in " + elapsed + " seconds");
     }
-
+    
+    public void firstExecuteQueryThenReleaseDbResourcesAndThenHandleResults(final AbstractResultSetProcessor processor) {
+        final String processorName = processor.getClass().getName();
+        long now = System.currentTimeMillis();
+        log.info("[OPTIMIZED] Starting query with result set processor {}. {}", processorName, now);
+        
+        ResultSet resultSet = null;
+        try {
+            final String query = processor.getQuery();
+            log.info("[OPTIMIZED] Executing query... {}", now);
+            resultSet = executeQuery(query);
+            log.info("[OPTIMIZED] Processing result set... {}", now);
+            processor.processResultSet(resultSet);
+            log.info("[OPTIMIZED] Query processed. {}", now);
+        } catch (JedisConnectionException e) {
+            log.error(String.format("[OPTIMIZED] Failed to connect to Redis while running processor %s.", processorName), e);
+            throw e;
+        } catch (Exception e) {
+            log.error("[OPTIMIZED] Failed to process query", e);
+        }
+        
+        long elapsed = (System.currentTimeMillis() - now) / 1000;
+        log.info("[OPTIMIZED] Data handled in " + elapsed + " seconds");
+    }
+    
     private ResultSet executeQuery(final String query) throws SQLException {
         Statement statement = connection.createStatement();
         ResultSet resultSet = statement.executeQuery(query);
         return resultSet;
     }
 
-    private static void closeQuery(final ResultSet resultSet, long now) {
+    public static void closeQuery(final ResultSet resultSet, long now) {
         Statement statement = null;
         try { statement = resultSet.getStatement(); } catch (Exception e) {
             log.error("Failed to get Statement", e);
