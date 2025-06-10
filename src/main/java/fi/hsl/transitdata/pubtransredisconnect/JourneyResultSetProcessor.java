@@ -39,10 +39,14 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
             journeyResultItems.add(journeyResultItem);
         }
 
+        log.info("[OPTIMIZED] Database query found {} rows", journeyResultItems.size());
         QueryProcessor.closeQuery(resultSet, -1L);
 
         for (JourneyResultItem journeyResultItem : journeyResultItems) {
             rowCounter++;
+            if (rowCounter % 5000 == 0) {
+                log.info("[OPTIMIZED] Now processing row {}", rowCounter);
+            }
             final Map<String, String> values = new HashMap<>();
             values.put(TransitdataProperties.KEY_ROUTE_NAME, journeyResultItem.routeName);
             values.put(TransitdataProperties.KEY_DIRECTION, journeyResultItem.direction);
