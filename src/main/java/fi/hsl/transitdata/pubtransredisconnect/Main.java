@@ -49,7 +49,7 @@ public class Main {
             final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils, queryUtils);
             final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisUtils, queryUtils);
             
-            queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
+            queryProcessor.firstExecuteQueryThenReleaseDbResourcesAndThenHandleResults(journeyResultSetProcessor);
             queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
             queryProcessor.executeAndProcessQuery(metroJourneyResultSetProcessor);
             
