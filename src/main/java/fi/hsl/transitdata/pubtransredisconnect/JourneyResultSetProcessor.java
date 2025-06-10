@@ -43,17 +43,24 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
         log.info("[OPTIMIZED] Database query found {} rows", journeyResultItems.size());
         QueryProcessor.closeQuery(resultSet, -1L);
         long timer = System.currentTimeMillis();
+        long startTime = timer;
         
         for (JourneyResultItem journeyResultItem : journeyResultItems) {
             rowCounter++;
             if (rowCounter % BATCH_SIZE == 0) {
-                long elapsed = System.currentTimeMillis() - timer;
-                long seconds = elapsed / 1000;
-                long minutes = seconds / 60;
-                long remainingSeconds = seconds % 60;
-                System.out.printf("%d min %d sec%n", minutes, remainingSeconds);
-                log.info("[OPTIMIZED] Row count: {}. Took {} min {} sec to process {} rows.",
-                        rowCounter, minutes, remainingSeconds, BATCH_SIZE);
+                long elapsedBatch = System.currentTimeMillis() - timer;
+                long secondsBatch = elapsedBatch / 1000;
+                long minutesBatch = secondsBatch / 60;
+                long remainingSecondsBatch = secondsBatch % 60;
+                
+                long elapsedTotal = System.currentTimeMillis() - startTime;
+                long secondsTotal = elapsedTotal / 1000;
+                long minutesTotal = secondsTotal / 60;
+                long remainingSecondsTotal = secondsTotal % 60;
+                
+                log.info("[OPTIMIZED] Processed {} rows of {} in {} min {} sec. Took {} min {} sec to process {} rows.",
+                        rowCounter, journeyResultItems.size(), minutesTotal, remainingSecondsTotal,
+                        minutesBatch, remainingSecondsBatch, BATCH_SIZE);
                 timer = System.currentTimeMillis();
             }
             final Map<String, String> values = new HashMap<>();
