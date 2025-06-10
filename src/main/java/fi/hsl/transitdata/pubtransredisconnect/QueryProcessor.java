@@ -63,6 +63,7 @@ public class QueryProcessor {
             throw e;
         } catch (Exception e) {
             log.error("[OPTIMIZED] Failed to process query", e);
+            closeQuery(resultSet, now);
         }
         
         long elapsed = (System.currentTimeMillis() - now) / 1000;
@@ -71,11 +72,22 @@ public class QueryProcessor {
     
     private ResultSet executeQuery(final String query) throws SQLException {
         Statement statement = connection.createStatement();
-        ResultSet resultSet = statement.executeQuery(query);
-        return resultSet;
+        return statement.executeQuery(query);
     }
 
     public static void closeQuery(final ResultSet resultSet, long now) {
+        if (resultSet == null) {
+            log.warn("ResultSet is null, nothing to close. {}", now);
+            return;
+        }
+        try {
+            if (resultSet.isClosed()) {
+                log.info("ResultSet is already closed, nothing to close. {}", now);
+                return;
+            }
+        } catch (SQLException e) {
+            log.info("Error occured when trying to check if ResultSet is closed. {}", now);
+        }
         Statement statement = null;
         try { statement = resultSet.getStatement(); } catch (Exception e) {
             log.error("Failed to get Statement", e);
