@@ -41,11 +41,18 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
 
         log.info("[OPTIMIZED] Database query found {} rows", journeyResultItems.size());
         QueryProcessor.closeQuery(resultSet, -1L);
+long timer = System.currentTimeMillis();
 
         for (JourneyResultItem journeyResultItem : journeyResultItems) {
             rowCounter++;
             if (rowCounter % 5000 == 0) {
-                log.info("[OPTIMIZED] Now processing row {}", rowCounter);
+                long elapsed = System.currentTimeMillis() - timer;
+                long seconds = elapsed / 1000;
+                long minutes = seconds / 60;
+                long remainingSeconds = seconds % 60;
+                System.out.printf("%d min %d sec%n", minutes, remainingSeconds);
+                log.info("[OPTIMIZED] Took {} min {} sec to process {} rows.", minutes, remainingSeconds, rowCounter);
+                timer = System.currentTimeMillis();
             }
             final Map<String, String> values = new HashMap<>();
             values.put(TransitdataProperties.KEY_ROUTE_NAME, journeyResultItem.routeName);
