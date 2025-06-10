@@ -13,6 +13,7 @@ import java.util.Map;
 public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(JourneyResultSetProcessor.class);
+    private static final int BATCH_SIZE = 5000;
     
     private record JourneyResultItem(
             String dvjId, String routeName, String direction, String operatingDay, String startTime) {};
@@ -45,13 +46,14 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
         
         for (JourneyResultItem journeyResultItem : journeyResultItems) {
             rowCounter++;
-            if (rowCounter % 5000 == 0) {
+            if (rowCounter % BATCH_SIZE == 0) {
                 long elapsed = System.currentTimeMillis() - timer;
                 long seconds = elapsed / 1000;
                 long minutes = seconds / 60;
                 long remainingSeconds = seconds % 60;
                 System.out.printf("%d min %d sec%n", minutes, remainingSeconds);
-                log.info("[OPTIMIZED] Took {} min {} sec to process {} rows.", minutes, remainingSeconds, rowCounter);
+                log.info("[OPTIMIZED] Row count: {}. Took {} min {} sec to process {} rows.",
+                        rowCounter, minutes, remainingSeconds, BATCH_SIZE);
                 timer = System.currentTimeMillis();
             }
             final Map<String, String> values = new HashMap<>();
