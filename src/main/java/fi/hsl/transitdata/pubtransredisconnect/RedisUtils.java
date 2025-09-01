@@ -12,6 +12,7 @@ import java.util.Map;
 import static fi.hsl.common.transitdata.TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP;
 
 public class RedisUtils {
+
     private static final Logger log = LoggerFactory.getLogger(RedisUtils.class);
 
     private final JedisExecutor jedisExecutor;

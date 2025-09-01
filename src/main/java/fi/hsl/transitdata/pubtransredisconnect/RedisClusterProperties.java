@@ -22,6 +22,7 @@ public class RedisClusterProperties {
 
     public final String masterName;
     public final Set<String> sentinels;
+    public final boolean healthCheck;
     public final Duration idleConnectionTimeout;
     public final int minIdleConnections;
     public final int maxConnections;
@@ -31,6 +32,7 @@ public class RedisClusterProperties {
 
     private RedisClusterProperties(String masterName,
                                    Set<String> sentinels,
+                                   @Nullable Boolean healthCheck,
                                    @Nullable Duration idleConnectionTimeout,
                                    @Nullable Integer minIdleConnections,
                                    @Nullable Integer maxConnections,
@@ -39,6 +41,7 @@ public class RedisClusterProperties {
                                    @Nullable Duration socketTimeout) {
         this.masterName = checkNotEmpty("masterName", masterName);
         this.sentinels = checkNotEmpty("sentinels", sentinels);
+        this.healthCheck = ofNullable(healthCheck).orElse(false);
         this.idleConnectionTimeout = ofNullable(idleConnectionTimeout).orElse(DEFAULT_IDLE_CONNECTION_TIMEOUT);
         this.minIdleConnections = ofNullable(minIdleConnections).orElse(DEFAULT_MIN_IDLE_CONNECTIONS);
         this.maxConnections = ofNullable(maxConnections).orElse(DEFAULT_MAX_CONNECTIONS);
@@ -53,6 +56,9 @@ public class RedisClusterProperties {
                 config.getStringList("redisCluster.sentinels")
                         .stream()
                         .collect(toUnmodifiableSet()),
+                config.hasPath("redisCluster.healthCheck")
+                        ? config.getBoolean("redisCluster.healthCheck")
+                        : null,
                 config.hasPath("redisCluster.idleConnectionTimeout")
                         ? config.getDuration("redisCluster.idleConnectionTimeout")
                         : null,
