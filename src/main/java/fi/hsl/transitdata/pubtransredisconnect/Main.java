@@ -12,6 +12,7 @@ import redis.clients.jedis.JedisSentinelPool;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
 import static fi.hsl.transitdata.pubtransredisconnect.Checks.checkEither;
@@ -122,9 +123,9 @@ public class Main {
                 }
             };
         } else {
-            final var pool = createJedisSentinelPool();
-
-            return new JedisExecutor() {
+            final var properties = redisClusterProperties(config);
+            final var pool = createJedisSentinelPool(properties);
+            final var jedisExecutor = new JedisExecutor() {
                 @Override
                 public <T> T execute(Function<Jedis, T> action) {
                     try (final var jedis = pool.getResource()) {
@@ -132,12 +133,17 @@ public class Main {
                     }
                 }
             };
+
+            if (properties.healthCheck) {
+                context.getHealthServer()
+                        .addCheck(jedisCustomHealthCheck(jedisExecutor));
+            }
+
+            return jedisExecutor;
         }
     }
 
-    private JedisSentinelPool createJedisSentinelPool() {
-        final var properties = redisClusterProperties(config);
-
+    private JedisSentinelPool createJedisSentinelPool(RedisClusterProperties properties) {
         return new JedisSentinelPool(
                 properties.masterName,
                 properties.sentinels,
@@ -147,5 +153,22 @@ public class Main {
                 null,
                 DEFAULT_DATABASE
         );
+    }
+
+    private BooleanSupplier jedisCustomHealthCheck(JedisExecutor jedisExecutor) {
+        return () -> jedisExecutor.execute(jedis -> {
+            try {
+                final var maybePong = jedis.ping();
+                if (maybePong.equals("PONG")) {
+                    return true;
+                } else {
+                    log.error("jedis.ping() returned: {}", maybePong);
+                }
+            } catch (Exception e) {
+                log.error("Exception in custom health check for redis connection", e);
+            }
+
+            return false;
+        });
     }
 }
