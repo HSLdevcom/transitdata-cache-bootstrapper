@@ -136,7 +136,7 @@ public class Main {
 
             if (properties.healthCheck) {
                 context.getHealthServer()
-                        .addCheck(jedisCustomHealthCheck(jedisExecutor));
+                        .addCheck(redisCustomHealthCheck(jedisExecutor));
             }
 
             return jedisExecutor;
@@ -155,7 +155,7 @@ public class Main {
         );
     }
 
-    private BooleanSupplier jedisCustomHealthCheck(JedisExecutor jedisExecutor) {
+    private BooleanSupplier redisCustomHealthCheck(JedisExecutor jedisExecutor) {
         return () -> jedisExecutor.execute(jedis -> {
             try {
                 final var maybePong = jedis.ping();
