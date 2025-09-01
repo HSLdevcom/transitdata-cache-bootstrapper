@@ -9,7 +9,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>24</maven.compiler.source>
         <maven.compiler.target>24</maven.compiler.target>
-        <common.version>2.0.3</common.version>
+        <common.version>2.0.5</common.version>
     </properties>
 
     <repositories>
