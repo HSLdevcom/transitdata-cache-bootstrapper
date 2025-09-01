@@ -1,16 +1,25 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
-import java.sql.*;
-
 import com.microsoft.sqlserver.jdbc.SQLServerException;
-import com.typesafe.config.*;
+import com.typesafe.config.Config;
 import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.pulsar.PulsarApplication;
 import fi.hsl.common.pulsar.PulsarApplicationContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisSentinelPool;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.util.function.Function;
+
+import static fi.hsl.transitdata.pubtransredisconnect.Checks.checkEither;
+import static fi.hsl.transitdata.pubtransredisconnect.RedisClusterProperties.redisClusterProperties;
+import static redis.clients.jedis.Protocol.DEFAULT_DATABASE;
 
 public class Main {
+
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     private final Config config;
@@ -46,7 +55,7 @@ public class Main {
     }
 
     private void initialize() {
-        redisUtils = new RedisUtils(context);
+        redisUtils = new RedisUtils(context, createJedisExecutor());
         final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
         log.info("Fetching data from -{} days to +{} days.",
@@ -104,8 +113,53 @@ public class Main {
             log.error("Exception at main", e);
             System.exit(1);
         }
-        
+
         log.info("Application completed successfully.");
         System.exit(0); // Exit with success code after successful execution
+    }
+
+    private JedisExecutor createJedisExecutor() {
+        final var config = context.getConfig();
+        final var redisEnabled = config.getBoolean("redis.enabled");
+        final var redisClusterEnabled = config.getBoolean("redisCluster.enabled");
+        checkEither(redisEnabled, redisClusterEnabled,
+                "Exactly one of 'redis.enabled' or 'redisCluster.enabled' must be true");
+
+        if (redisEnabled) {
+            final var jedis = context.getJedis();
+            return new JedisExecutor() {
+                @Override
+                public <T> T execute(Function<Jedis, T> action) {
+                    synchronized (jedis) {
+                        return action.apply(jedis);
+                    }
+                }
+            };
+        } else {
+            final var pool = createJedisSentinelPool();
+
+            return new JedisExecutor() {
+                @Override
+                public <T> T execute(Function<Jedis, T> action) {
+                    try (final var jedis = pool.getResource()) {
+                        return action.apply(jedis);
+                    }
+                }
+            };
+        }
+    }
+
+    private JedisSentinelPool createJedisSentinelPool() {
+        final var properties = redisClusterProperties(config);
+
+        return new JedisSentinelPool(
+                properties.masterName,
+                properties.sentinels,
+                properties.jedisPoolConfig(),
+                (int) properties.connectionTimeout.toMillis(),
+                (int) properties.socketTimeout.toMillis(),
+                null,
+                DEFAULT_DATABASE
+        );
     }
 }
