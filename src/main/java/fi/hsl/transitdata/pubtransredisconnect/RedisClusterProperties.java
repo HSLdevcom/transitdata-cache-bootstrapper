@@ -5,6 +5,7 @@ import redis.clients.jedis.JedisPoolConfig;
 
 import javax.annotation.Nullable;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Set;
 
 import static fi.hsl.transitdata.pubtransredisconnect.Checks.checkNotEmpty;
@@ -53,8 +54,7 @@ public class RedisClusterProperties {
     public static RedisClusterProperties redisClusterProperties(Config config) {
         return new RedisClusterProperties(
                 config.getString("redisCluster.masterName"),
-                config.getStringList("redisCluster.sentinels")
-                        .stream()
+                Arrays.stream(config.getString("redisCluster.sentinels").split(","))
                         .collect(toUnmodifiableSet()),
                 config.hasPath("redisCluster.healthCheck")
                         ? config.getBoolean("redisCluster.healthCheck")
