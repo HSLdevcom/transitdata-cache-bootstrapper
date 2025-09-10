@@ -1,10 +1,12 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
+import fi.hsl.common.redis.RedisStore;
 import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -14,12 +16,12 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(JourneyResultSetProcessor.class);
 private static final int BATCH_SIZE = 5000;
-
     private record JourneyResultItem(
-            String dvjId, String routeName, String direction, String operatingDay, String startTime) {};
+            String dvjId, String routeName, String direction, String operatingDay, String startTime) {
+    }
 
-    public JourneyResultSetProcessor(final RedisUtils redisUtils, QueryUtils queryUtils) {
-        super(redisUtils, queryUtils);
+    public JourneyResultSetProcessor(final RedisStore redisStore, QueryUtils queryUtils, Duration redisTtl) {
+        super(redisStore, queryUtils, redisTtl);
     }
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
@@ -44,7 +46,6 @@ private static final int BATCH_SIZE = 5000;
         QueryProcessor.closeQuery(resultSet, -1L);
 long timer = System.currentTimeMillis();
 long startTime = timer;
-        
         for (JourneyResultItem journeyResultItem : journeyResultItems) {
             rowCounter++;
             if (rowCounter % BATCH_SIZE == 0) {
@@ -70,10 +71,10 @@ long startTime = timer;
             values.put(TransitdataProperties.KEY_OPERATING_DAY, journeyResultItem.operatingDay);
 
             final String key = TransitdataProperties.REDIS_PREFIX_DVJ + journeyResultItem.dvjId;
-            String response = redisUtils.setValues(key, values);
+            String response = redisStore.setValues(key, values);
 
-            if (redisUtils.checkResponse(response)) {
-                redisUtils.setExpire(key);
+            if (redisStore.checkResponse(response)) {
+                redisStore.setExpire(key, redisTtl);
                 tripInfoCounter++;
 
                 //Insert a composite key that allows reverse lookup of the dvj id
@@ -81,9 +82,9 @@ long startTime = timer;
                 final String joreKey = TransitdataProperties.formatJoreId(
                         journeyResultItem.routeName, journeyResultItem.direction,
                         journeyResultItem.operatingDay, journeyResultItem.startTime);
-                response = redisUtils.setValue(joreKey, journeyResultItem.dvjId);
-                if (redisUtils.checkResponse(response)) {
-                    redisUtils.setExpire(joreKey);
+                response = redisStore.setValue(joreKey, journeyResultItem.dvjId);
+                if (redisStore.checkResponse(response)) {
+                    redisStore.setExpire(joreKey, redisTtl);
                     lookupCounter++;
                 } else {
                     log.error("[OPTIMIZED] Failed to set reverse-lookup key {}, Redis returned {}", joreKey, response);
