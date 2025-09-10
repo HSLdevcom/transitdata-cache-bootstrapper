@@ -1,28 +1,30 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
+import fi.hsl.common.redis.RedisStore;
 import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
+import java.time.Duration;
 
 public class StopResultSetProcessor extends AbstractResultSetProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(StopResultSetProcessor.class);
 
-    public StopResultSetProcessor(final RedisUtils redisUtils, final QueryUtils queryUtils) {
-        super(redisUtils, queryUtils);
+    public StopResultSetProcessor(RedisStore redisStore, QueryUtils queryUtils, Duration redisTtl) {
+        super(redisStore, queryUtils, redisTtl);
     }
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
         int rowCounter = 0;
         int redisCounter = 0;
 
-        while(resultSet.next()) {
+        while (resultSet.next()) {
             rowCounter++;
-            String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString("Gid");
-            String response = redisUtils.setValue(key, resultSet.getString("Number"));
-            if (redisUtils.checkResponse(response)) {
+            String key = TransitdataProperties.REDIS_PREFIX_JPP + resultSet.getString("Gid");
+            String response = redisStore.setValue(key, resultSet.getString("Number"));
+            if (redisStore.checkResponse(response)) {
                 redisCounter++;
             } else {
                 log.error("Failed to set stop key {}, Redis returned {}", key, response);

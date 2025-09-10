@@ -1,5 +1,6 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
+import fi.hsl.common.redis.RedisStore;
 import fi.hsl.common.transitdata.JoreDateTime;
 import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
@@ -7,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
 import java.text.ParseException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
@@ -19,8 +21,8 @@ import java.util.Map;
 public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
     private static final Logger log = LoggerFactory.getLogger(MetroJourneyResultSetProcessor.class);
 
-    public MetroJourneyResultSetProcessor(final RedisUtils redisUtils, final QueryUtils queryUtils) {
-        super(redisUtils, queryUtils);
+    public MetroJourneyResultSetProcessor(RedisStore redisStore, QueryUtils queryUtils, Duration redisTtl) {
+        super(redisStore, queryUtils, redisTtl);
     }
 
     public void processResultSet(final ResultSet resultSet) throws Exception {
@@ -45,9 +47,9 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
             values.put(TransitdataProperties.KEY_START_STOP_NUMBER, stopNumber);
 
             String metroKey = TransitdataProperties.formatMetroId(stopNumber, dateTime);
-            String response = redisUtils.setValues(metroKey, values);
-            if (redisUtils.checkResponse(response)) {
-                redisUtils.setExpire(metroKey);
+            String response = redisStore.setValues(metroKey, values);
+            if (redisStore.checkResponse(response)) {
+                redisStore.setExpire(metroKey, redisTtl);
                 redisCounter++;
             } else {
                 log.error("Failed to set metro key {}, Redis returned {}", metroKey, response);

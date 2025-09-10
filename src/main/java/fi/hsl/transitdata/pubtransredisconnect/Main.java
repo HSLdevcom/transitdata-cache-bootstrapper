@@ -5,19 +5,17 @@ import com.typesafe.config.Config;
 import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.pulsar.PulsarApplication;
 import fi.hsl.common.pulsar.PulsarApplicationContext;
+import fi.hsl.common.redis.RedisStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisSentinelPool;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.util.function.BooleanSupplier;
-import java.util.function.Function;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 
-import static fi.hsl.transitdata.pubtransredisconnect.Checks.checkEither;
-import static fi.hsl.transitdata.pubtransredisconnect.RedisClusterProperties.redisClusterProperties;
-import static redis.clients.jedis.Protocol.DEFAULT_DATABASE;
+import static fi.hsl.common.transitdata.TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP;
 
 public class Main {
 
@@ -28,8 +26,9 @@ public class Main {
     private final PulsarApplicationContext context;
     private final String connectionString;
 
-    private RedisUtils redisUtils;
+    private RedisStore redisStore;
     private QueryUtils queryUtils;
+    private Duration redisTtl;
 
     public Main(PulsarApplicationContext context, String connectionString) {
         this.context = context;
@@ -43,11 +42,12 @@ public class Main {
     }
 
     private void initialize() {
-        redisUtils = new RedisUtils(context, createJedisExecutor());
         final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
         log.info("Fetching data from -{} days to +{} days.",
                 queryHistoryInDays, queryFutureInDays);
+        redisStore = context.getRedisStore();
+        redisTtl = Duration.ofDays(config.getInt("bootstrapper.redisTTLInDays"));
         queryUtils = new QueryUtils(queryHistoryInDays, queryFutureInDays);
     }
 
@@ -55,15 +55,15 @@ public class Main {
         log.info("Fetching data");
         try (Connection connection = DriverManager.getConnection(connectionString)) {
             final QueryProcessor queryProcessor = new QueryProcessor(connection);
-            final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils, queryUtils);
-            final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils, queryUtils);
-            final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisUtils, queryUtils);
+            final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
+            final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisStore, queryUtils, redisTtl);
+            final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
 
             queryProcessor.firstExecuteQueryThenReleaseDbResourcesAndThenHandleResults(journeyResultSetProcessor);
             queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
             queryProcessor.executeAndProcessQuery(metroJourneyResultSetProcessor);
 
-            redisUtils.updateTimestamp();
+            updateTimestamp();
 
             log.info("All data processed, thank you.");
         } catch (SQLServerException sqlServerException) {
@@ -105,70 +105,16 @@ public class Main {
         System.exit(0); // Exit with success code after successful execution
     }
 
-    private JedisExecutor createJedisExecutor() {
-        final var config = context.getConfig();
-        final var redisEnabled = config.getBoolean("redis.enabled");
-        final var redisClusterEnabled = config.getBoolean("redisCluster.enabled");
-        checkEither(redisEnabled, redisClusterEnabled,
-                "Exactly one of 'redis.enabled' or 'redisCluster.enabled' must be true");
-
-        if (redisEnabled) {
-            final var jedis = context.getJedis();
-            return new JedisExecutor() {
-                @Override
-                public <T> T execute(Function<Jedis, T> action) {
-                    synchronized (jedis) {
-                        return action.apply(jedis);
-                    }
-                }
-            };
-        } else {
-            final var properties = redisClusterProperties(config);
-            final var pool = createJedisSentinelPool(properties);
-            final var jedisExecutor = new JedisExecutor() {
-                @Override
-                public <T> T execute(Function<Jedis, T> action) {
-                    try (final var jedis = pool.getResource()) {
-                        return action.apply(jedis);
-                    }
-                }
-            };
-
-            if (properties.healthCheck) {
-                context.getHealthServer()
-                        .addCheck(redisCustomHealthCheck(jedisExecutor));
+    private void updateTimestamp() {
+        redisStore.execute(jedis -> {
+            final OffsetDateTime now = OffsetDateTime.now();
+            final String ts = DateTimeFormatter.ISO_INSTANT.format(now);
+            log.info("Updating Redis with latest timestamp: " + ts);
+            final var result = jedis.set(KEY_LAST_CACHE_UPDATE_TIMESTAMP, ts);
+            if (!redisStore.checkResponse(result)) {
+                log.error("Failed to update cache timestamp to Redis!");
             }
-
-            return jedisExecutor;
-        }
-    }
-
-    private JedisSentinelPool createJedisSentinelPool(RedisClusterProperties properties) {
-        return new JedisSentinelPool(
-                properties.masterName,
-                properties.sentinels,
-                properties.jedisPoolConfig(),
-                (int) properties.connectionTimeout.toMillis(),
-                (int) properties.socketTimeout.toMillis(),
-                null,
-                DEFAULT_DATABASE
-        );
-    }
-
-    private BooleanSupplier redisCustomHealthCheck(JedisExecutor jedisExecutor) {
-        return () -> jedisExecutor.execute(jedis -> {
-            try {
-                final var maybePong = jedis.ping();
-                if (maybePong.equals("PONG")) {
-                    return true;
-                } else {
-                    log.error("jedis.ping() returned: {}", maybePong);
-                }
-            } catch (Exception e) {
-                log.error("Exception in custom health check for redis connection", e);
-            }
-
-            return false;
+            return result;
         });
     }
 }
