@@ -58,15 +58,16 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
     }
 
     protected String getQuery() {
-        String query = new StringBuilder()
-                .append("SELECT ")
+        String query = new StringBuilder().append("SELECT ")
                 .append("   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS " + queryUtils.DVJ_ID + ", ")
                 .append("   KVV.StringValue AS " + queryUtils.ROUTE_NAME + ", ")
-                .append("   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS " + queryUtils.DIRECTION + ", ")
+                .append("   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS "
+                        + queryUtils.DIRECTION + ", ")
                 .append("   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + queryUtils.OPERATING_DAY + ", ")
                 .append("   RIGHT('0' + (CONVERT(VARCHAR(2), (DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime)))), 2) ")
                 .append("       + ':' + RIGHT('0' + CONVERT(VARCHAR(2), ((DATEDIFF(MINUTE, '1900-01-01', PlannedStartOffsetDateTime)) ")
-                .append("       - ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS " + queryUtils.START_TIME + ", ")
+                .append("       - ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS "
+                        + queryUtils.START_TIME + ", ")
                 .append("   CONVERT(CHAR(7), JPP.Number) AS " + queryUtils.STOP_NUMBER + " ")
                 .append("FROM ptDOI4_Community.dbo.DatedVehicleJourney AS DVJ ")
                 .append("LEFT JOIN ptDOI4_Community.dbo.VehicleJourney AS VJ ON (DVJ.IsBasedOnVehicleJourneyId = VJ.Id) ")
@@ -76,18 +77,13 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor {
                 .append("LEFT JOIN ptDOI4_Community.dbo.KeyType AS KT ON (KT.Id = KVT.IsForKeyTypeId) ")
                 .append("LEFT JOIN ptDOI4_Community.dbo.ObjectType AS OT ON (KT.ExtendsObjectTypeNumber = OT.Number) ")
                 .append("LEFT JOIN ptDOI4_Community.dbo.JourneyPatternPoint AS JPP ON (VJT.StartsAtJourneyPatternPointGid = JPP.Gid) ")
-                .append("WHERE ")
-                .append("   ( ")
-                .append("       KT.Name = 'JoreIdentity' ")
-                .append("       OR KT.Name = 'JoreRouteIdentity' ")
-                .append("       OR KT.Name = 'RouteName' ")
-                .append("   ) ")
-                .append("   AND OT.Name = 'VehicleJourney' ")
+                .append("WHERE ").append("   ( ").append("       KT.Name = 'JoreIdentity' ")
+                .append("       OR KT.Name = 'JoreRouteIdentity' ").append("       OR KT.Name = 'RouteName' ")
+                .append("   ) ").append("   AND OT.Name = 'VehicleJourney' ")
                 .append("   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL ")
                 .append("   AND DVJ.OperatingDayDate >= '" + queryUtils.from + "' ")
                 .append("   AND DVJ.OperatingDayDate < '" + queryUtils.to + "' ")
-                .append("   AND DVJ.IsReplacedById IS NULL ")
-                .append("   AND VJT.TransportModeCode = 'METRO' ")
+                .append("   AND DVJ.IsReplacedById IS NULL ").append("   AND VJT.TransportModeCode = 'METRO' ")
                 .toString();
         return query;
     }

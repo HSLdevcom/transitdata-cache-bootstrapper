@@ -53,20 +53,24 @@ public class QueryProcessor {
 
     private static void closeQuery(final ResultSet resultSet, long now) {
         Statement statement = null;
-        try { statement = resultSet.getStatement(); } catch (Exception e) {
+        try {
+            statement = resultSet.getStatement();
+        } catch (Exception e) {
             log.error("Failed to get Statement", e);
         }
-        if (resultSet != null)  try {
-            resultSet.close();
-            log.info("ResultSet closed. {}", now);
-        } catch (Exception e) {
-            log.error("Failed to close ResultSet", e);
-        }
-        if (statement != null)  try {
-            statement.close();
-            log.info("Statement closed. {}", now);
-        } catch (Exception e) {
-            log.error("Failed to close Statement", e);
-        }
+        if (resultSet != null)
+            try {
+                resultSet.close();
+                log.info("ResultSet closed. {}", now);
+            } catch (Exception e) {
+                log.error("Failed to close ResultSet", e);
+            }
+        if (statement != null)
+            try {
+                statement.close();
+                log.info("Statement closed. {}", now);
+            } catch (Exception e) {
+                log.error("Failed to close Statement", e);
+            }
     }
 }

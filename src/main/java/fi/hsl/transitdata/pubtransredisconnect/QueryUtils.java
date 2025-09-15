@@ -47,22 +47,22 @@ public class QueryUtils {
         log.debug("offsetInDays results to date " + formattedString);
         return formattedString;
     }
-    
+
     public long secondsUntilNextEvenHourPlusMinutes() {
         if (queryMinutesFromEvenHour < 0 || queryMinutesFromEvenHour > 59) {
             throw new IllegalArgumentException("Minutes must be between 0 and 59");
         }
-        
+
         OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime thisHour = now.truncatedTo(ChronoUnit.HOURS);
         OffsetDateTime nextTime = thisHour.plusMinutes(queryMinutesFromEvenHour);
-        
+
         if (nextTime.isBefore(now)) {
             OffsetDateTime nextHour = now.plusHours(1);
             OffsetDateTime evenHour = nextHour.truncatedTo(ChronoUnit.HOURS);
             nextTime = evenHour.plusMinutes(queryMinutesFromEvenHour);
         }
-        
+
         log.debug("Current time is " + now.toString() + ", next time is at " + nextTime.toString());
         return Duration.between(now, nextTime).getSeconds();
     }
