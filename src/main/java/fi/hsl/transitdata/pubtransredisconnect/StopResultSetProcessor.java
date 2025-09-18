@@ -18,9 +18,9 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor {
         int rowCounter = 0;
         int redisCounter = 0;
 
-        while(resultSet.next()) {
+        while (resultSet.next()) {
             rowCounter++;
-            String key = TransitdataProperties.REDIS_PREFIX_JPP  + resultSet.getString("Gid");
+            String key = TransitdataProperties.REDIS_PREFIX_JPP + resultSet.getString("Gid");
             String response = redisUtils.setValue(key, resultSet.getString("Number"));
             if (redisUtils.checkResponse(response)) {
                 redisCounter++;
@@ -33,12 +33,9 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor {
     }
 
     protected String getQuery() {
-        String query = new StringBuilder()
-                .append("SELECT ")
-                .append("[Gid], [Number] ")
+        String query = new StringBuilder().append("SELECT ").append("[Gid], [Number] ")
                 .append("FROM [ptDOI4_Community].[dbo].[JourneyPatternPoint] AS JPP ")
-                .append("GROUP BY JPP.Gid, JPP.Number ")
-                .toString();
+                .append("GROUP BY JPP.Gid, JPP.Number ").toString();
         return query;
     }
 }

@@ -42,7 +42,7 @@ public class Main {
 
     final boolean lastUpdateTimeHealthy() {
         long updateIntervalMillis = System.currentTimeMillis() - lastUpdateTime;
-        long intervalSecs = Math.round((double) updateIntervalMillis/1000);
+        long intervalSecs = Math.round((double) updateIntervalMillis / 1000);
         if (intervalSecs > UNHEALTHY_UPDATE_INTERVAL_SECS) {
             log.error("Exceeded UNHEALTHY_UPDATE_INTERVAL_SECS threshold: {} s with interval of {} s",
                     UNHEALTHY_UPDATE_INTERVAL_SECS, intervalSecs);
@@ -53,7 +53,7 @@ public class Main {
 
     public void start() throws Exception {
         if (context.getHealthServer() != null) {
-            context.getHealthServer().addCheck(() -> lastUpdateTimeHealthy() );
+            context.getHealthServer().addCheck(() -> lastUpdateTimeHealthy());
         }
         initialize();
         startPolling();
@@ -73,7 +73,7 @@ public class Main {
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
         final int queryMinutesFromEvenHour = config.getInt("bootstrapper.queryMinutesFromEvenHour");
         log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days. "
-            + queryMinutesFromEvenHour + " minutes from even hour.");
+                + queryMinutesFromEvenHour + " minutes from even hour.");
         queryUtils = new QueryUtils(queryHistoryInDays, queryFutureInDays, queryMinutesFromEvenHour);
     }
 
@@ -100,9 +100,12 @@ public class Main {
             log.info("Fetching data");
             try (Connection connection = DriverManager.getConnection(connectionString)) {
                 final QueryProcessor queryProcessor = new QueryProcessor(connection);
-                final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils, queryUtils);
-                final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils, queryUtils);
-                final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisUtils, queryUtils);
+                final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils,
+                        queryUtils);
+                final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils,
+                        queryUtils);
+                final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(
+                        redisUtils, queryUtils);
 
                 queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
                 queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
@@ -112,23 +115,18 @@ public class Main {
 
                 lastUpdateTime = System.currentTimeMillis();
                 log.info("All data processed, thank you.");
-            }
-            catch (SQLServerException sqlServerException) {
-                String msg = "SQLServerException during query, Driver Error code: "
-                        + sqlServerException.getErrorCode()
+            } catch (SQLServerException sqlServerException) {
+                String msg = "SQLServerException during query, Driver Error code: " + sqlServerException.getErrorCode()
                         + " and SQL State: " + sqlServerException.getSQLState();
                 log.error(msg, sqlServerException);
                 shutdown();
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 log.error("Unknown exception during query ", e);
                 shutdown();
-            }
-            finally {
+            } finally {
                 processingActive.set(false);
             }
-        }
-        else {
+        } else {
             log.warn("Processing already active, will not launch another task.");
         }
     }
@@ -159,7 +157,7 @@ public class Main {
             System.exit(1);
         }
         Config config = ConfigParser.createConfig();
-        
+
         PulsarApplication app = null;
         while (app == null) {
             try {
@@ -174,7 +172,7 @@ public class Main {
                 }
             }
         }
-        
+
         try {
             PulsarApplicationContext context = app.getContext();
             Main main = new Main(context, connectionString);
