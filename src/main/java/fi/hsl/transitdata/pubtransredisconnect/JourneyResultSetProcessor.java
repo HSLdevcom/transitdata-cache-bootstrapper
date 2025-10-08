@@ -15,7 +15,8 @@ import java.util.Map;
 public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(JourneyResultSetProcessor.class);
-private static final int BATCH_SIZE = 5000;
+    private static final int BATCH_SIZE = 5000;
+
     private record JourneyResultItem(
             String dvjId, String routeName, String direction, String operatingDay, String startTime) {
     }
@@ -44,8 +45,8 @@ private static final int BATCH_SIZE = 5000;
 
         log.info("[OPTIMIZED] Database query found {} rows", journeyResultItems.size());
         QueryProcessor.closeQuery(resultSet, -1L);
-long timer = System.currentTimeMillis();
-long startTime = timer;
+        long timer = System.currentTimeMillis();
+        long startTime = timer;
         for (JourneyResultItem journeyResultItem : journeyResultItems) {
             rowCounter++;
             if (rowCounter % BATCH_SIZE == 0) {
