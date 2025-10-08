@@ -34,19 +34,6 @@ public class Main {
         this.context = context;
         this.config = context.getConfig();
         this.connectionString = connectionString;
-        this.UNHEALTHY_UPDATE_INTERVAL_SECS = config.getInt("application.unhealthyUpdateIntervalSecs");
-        this.lastUpdateTime = System.currentTimeMillis();
-    }
-
-    final boolean lastUpdateTimeHealthy() {
-        long updateIntervalMillis = System.currentTimeMillis() - lastUpdateTime;
-        long intervalSecs = Math.round((double) updateIntervalMillis / 1000);
-        if (intervalSecs > UNHEALTHY_UPDATE_INTERVAL_SECS) {
-            log.error("Exceeded UNHEALTHY_UPDATE_INTERVAL_SECS threshold: {} s with interval of {} s",
-                    UNHEALTHY_UPDATE_INTERVAL_SECS, intervalSecs);
-            return false;
-        }
-        return true;
     }
 
     public void start() {
