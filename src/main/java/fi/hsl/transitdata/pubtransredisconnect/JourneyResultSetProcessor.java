@@ -1,53 +1,88 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
 import fi.hsl.common.redis.RedisStore;
-import fi.hsl.common.transitdata.TransitdataProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
-public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
+import static fi.hsl.common.transitdata.TransitdataProperties.KEY_DIRECTION;
+import static fi.hsl.common.transitdata.TransitdataProperties.KEY_OPERATING_DAY;
+import static fi.hsl.common.transitdata.TransitdataProperties.KEY_ROUTE_NAME;
+import static fi.hsl.common.transitdata.TransitdataProperties.KEY_START_TIME;
+import static fi.hsl.common.transitdata.TransitdataProperties.REDIS_PREFIX_DVJ;
+import static fi.hsl.common.transitdata.TransitdataProperties.formatJoreId;
+import static fi.hsl.transitdata.pubtransredisconnect.JourneyResultSetProcessor.JourneyResultItem;
+
+public class JourneyResultSetProcessor extends AbstractResultSetProcessor<JourneyResultItem> {
 
     private static final Logger log = LoggerFactory.getLogger(JourneyResultSetProcessor.class);
     private static final int BATCH_SIZE = 5000;
 
-    private record JourneyResultItem(
-            String dvjId, String routeName, String direction, String operatingDay, String startTime) {
+    record JourneyResultItem(String dvjId, String routeName, String direction, String operatingDay, String startTime) {
     }
 
     public JourneyResultSetProcessor(final RedisStore redisStore, QueryUtils queryUtils, Duration redisTtl) {
         super(redisStore, queryUtils, redisTtl);
     }
 
-    public void processResultSet(final ResultSet resultSet) throws Exception {
-        int tripInfoCounter = 0;
-        int lookupCounter = 0;
-        int rowCounter = 0;
+    @Override
+    String getQuery() {
+        return "SELECT " +
+                "   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS " + queryUtils.DVJ_ID + ", " +
+                "   KVV.StringValue AS " + queryUtils.ROUTE_NAME + ", " +
+                "   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS "
+                + queryUtils.DIRECTION + ", " +
+                "   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + queryUtils.OPERATING_DAY + ", " +
+                "   RIGHT('0' + (CONVERT(VARCHAR(2), (DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime)))), 2) " +
+                "       + ':' + RIGHT('0' + CONVERT(VARCHAR(2), ((DATEDIFF(MINUTE, '1900-01-01', PlannedStartOffsetDateTime)) " +
+                "       - ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS "
+                + queryUtils.START_TIME + " " +
+                "FROM ptDOI4_Community.dbo.DatedVehicleJourney AS DVJ " +
+                "LEFT JOIN ptDOI4_Community.dbo.VehicleJourney AS VJ ON (DVJ.IsBasedOnVehicleJourneyId = VJ.Id) " +
+                "LEFT JOIN ptDOI4_Community.dbo.VehicleJourneyTemplate AS VJT ON (DVJ.IsBasedOnVehicleJourneyTemplateId = VJT.Id) " +
+                "LEFT JOIN ptDOI4_Community.T.KeyVariantValue AS KVV ON (KVV.IsForObjectId = VJ.Id) " +
+                "LEFT JOIN ptDOI4_Community.dbo.KeyVariantType AS KVT ON (KVT.Id = KVV.IsOfKeyVariantTypeId) " +
+                "LEFT JOIN ptDOI4_Community.dbo.KeyType AS KT ON (KT.Id = KVT.IsForKeyTypeId) " +
+                "LEFT JOIN ptDOI4_Community.dbo.ObjectType AS OT ON (KT.ExtendsObjectTypeNumber = OT.Number) " +
+                "WHERE " + "   ( " + "       KT.Name = 'JoreIdentity' " +
+                "       OR KT.Name = 'JoreRouteIdentity' " + "       OR KT.Name = 'RouteName' " +
+                "   ) " + "   AND OT.Name = 'VehicleJourney' " +
+                "   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL " +
+                "   AND DVJ.OperatingDayDate >= '" + queryUtils.from + "' " +
+                "   AND DVJ.OperatingDayDate < '" + queryUtils.to + "' " +
+                "   AND DVJ.IsReplacedById IS NULL ";
+    }
 
-        List<JourneyResultItem> journeyResultItems = new ArrayList<>();
+    @Override
+    Collection<JourneyResultItem> collectResults(ResultSet resultSet) throws Exception {
+        var items = new ArrayList<JourneyResultItem>();
 
         while (resultSet.next()) {
-            JourneyResultItem journeyResultItem = new JourneyResultItem(
+            items.add(new JourneyResultItem(
                     resultSet.getString(queryUtils.DVJ_ID),
                     resultSet.getString(queryUtils.ROUTE_NAME),
                     resultSet.getString(queryUtils.DIRECTION),
                     resultSet.getString(queryUtils.OPERATING_DAY),
-                    resultSet.getString(queryUtils.START_TIME));
-
-            journeyResultItems.add(journeyResultItem);
+                    resultSet.getString(queryUtils.START_TIME)));
         }
 
-        log.info("[OPTIMIZED] Database query found {} rows", journeyResultItems.size());
-        QueryProcessor.closeQuery(resultSet, -1L);
+        return items;
+    }
+
+    @Override
+    void processItems(Collection<JourneyResultItem> items) throws Exception {
+        int tripInfoCounter = 0;
+        int lookupCounter = 0;
+        int rowCounter = 0;
+
         long timer = System.currentTimeMillis();
         long startTime = timer;
-        for (JourneyResultItem journeyResultItem : journeyResultItems) {
+        for (var item : items) {
             rowCounter++;
             if (rowCounter % BATCH_SIZE == 0) {
                 long elapsedBatch = System.currentTimeMillis() - timer;
@@ -60,19 +95,20 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
                 long minutesTotal = secondsTotal / 60;
                 long remainingSecondsTotal = secondsTotal % 60;
 
-                log.info("[OPTIMIZED] Processed {} rows of {} in {} min {} sec. Took {} min {} sec to process {} rows.",
-                        rowCounter, journeyResultItems.size(), minutesTotal, remainingSecondsTotal,
+                log.info("Processed {} rows of {} in {} min {} sec. Took {} min {} sec to process {} rows.",
+                        rowCounter, items.size(), minutesTotal, remainingSecondsTotal,
                         minutesBatch, remainingSecondsBatch, BATCH_SIZE);
                 timer = System.currentTimeMillis();
             }
-            final Map<String, String> values = new HashMap<>();
-            values.put(TransitdataProperties.KEY_ROUTE_NAME, journeyResultItem.routeName);
-            values.put(TransitdataProperties.KEY_DIRECTION, journeyResultItem.direction);
-            values.put(TransitdataProperties.KEY_START_TIME, journeyResultItem.startTime);
-            values.put(TransitdataProperties.KEY_OPERATING_DAY, journeyResultItem.operatingDay);
 
-            final String key = TransitdataProperties.REDIS_PREFIX_DVJ + journeyResultItem.dvjId;
-            String response = redisStore.setValues(key, values);
+            final var values = new HashMap<String, String>();
+            values.put(KEY_ROUTE_NAME, item.routeName);
+            values.put(KEY_DIRECTION, item.direction);
+            values.put(KEY_START_TIME, item.startTime);
+            values.put(KEY_OPERATING_DAY, item.operatingDay);
+
+            final var key = REDIS_PREFIX_DVJ + item.dvjId;
+            var response = redisStore.setValues(key, values);
 
             if (redisStore.checkResponse(response)) {
                 redisStore.setExpire(key, redisTtl);
@@ -80,50 +116,22 @@ public class JourneyResultSetProcessor extends AbstractResultSetProcessor {
 
                 //Insert a composite key that allows reverse lookup of the dvj id
                 //The format is route-direction-date-time
-                final String joreKey = TransitdataProperties.formatJoreId(
-                        journeyResultItem.routeName, journeyResultItem.direction,
-                        journeyResultItem.operatingDay, journeyResultItem.startTime);
-                response = redisStore.setValue(joreKey, journeyResultItem.dvjId);
+                final var joreKey = formatJoreId(
+                        item.routeName, item.direction,
+                        item.operatingDay, item.startTime);
+                response = redisStore.setValue(joreKey, item.dvjId);
                 if (redisStore.checkResponse(response)) {
                     redisStore.setExpire(joreKey, redisTtl);
                     lookupCounter++;
                 } else {
-                    log.error("[OPTIMIZED] Failed to set reverse-lookup key {}, Redis returned {}", joreKey, response);
+                    log.error("Failed to set reverse-lookup key {}, Redis returned {}", joreKey, response);
                 }
             } else {
-                log.error("[OPTIMIZED] Failed to set Trip details for key {}, Redis returned {}", key, response);
+                log.error("Failed to set Trip details for key {}, Redis returned {}", key, response);
             }
         }
 
-        log.info("[OPTIMIZED] Inserted {} trip info and {} reverse-lookup keys for {} DB rows", tripInfoCounter, lookupCounter,
+        log.info("Inserted {} trip info and {} reverse-lookup keys for {} DB rows", tripInfoCounter, lookupCounter,
                 rowCounter);
-    }
-
-    protected String getQuery() {
-        String query = new StringBuilder().append("SELECT ")
-                .append("   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS " + queryUtils.DVJ_ID + ", ")
-                .append("   KVV.StringValue AS " + queryUtils.ROUTE_NAME + ", ")
-                .append("   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS "
-                        + queryUtils.DIRECTION + ", ")
-                .append("   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + queryUtils.OPERATING_DAY + ", ")
-                .append("   RIGHT('0' + (CONVERT(VARCHAR(2), (DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime)))), 2) ")
-                .append("       + ':' + RIGHT('0' + CONVERT(VARCHAR(2), ((DATEDIFF(MINUTE, '1900-01-01', PlannedStartOffsetDateTime)) ")
-                .append("       - ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS "
-                        + queryUtils.START_TIME + " ")
-                .append("FROM ptDOI4_Community.dbo.DatedVehicleJourney AS DVJ ")
-                .append("LEFT JOIN ptDOI4_Community.dbo.VehicleJourney AS VJ ON (DVJ.IsBasedOnVehicleJourneyId = VJ.Id) ")
-                .append("LEFT JOIN ptDOI4_Community.dbo.VehicleJourneyTemplate AS VJT ON (DVJ.IsBasedOnVehicleJourneyTemplateId = VJT.Id) ")
-                .append("LEFT JOIN ptDOI4_Community.T.KeyVariantValue AS KVV ON (KVV.IsForObjectId = VJ.Id) ")
-                .append("LEFT JOIN ptDOI4_Community.dbo.KeyVariantType AS KVT ON (KVT.Id = KVV.IsOfKeyVariantTypeId) ")
-                .append("LEFT JOIN ptDOI4_Community.dbo.KeyType AS KT ON (KT.Id = KVT.IsForKeyTypeId) ")
-                .append("LEFT JOIN ptDOI4_Community.dbo.ObjectType AS OT ON (KT.ExtendsObjectTypeNumber = OT.Number) ")
-                .append("WHERE ").append("   ( ").append("       KT.Name = 'JoreIdentity' ")
-                .append("       OR KT.Name = 'JoreRouteIdentity' ").append("       OR KT.Name = 'RouteName' ")
-                .append("   ) ").append("   AND OT.Name = 'VehicleJourney' ")
-                .append("   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL ")
-                .append("   AND DVJ.OperatingDayDate >= '" + queryUtils.from + "' ")
-                .append("   AND DVJ.OperatingDayDate < '" + queryUtils.to + "' ")
-                .append("   AND DVJ.IsReplacedById IS NULL ").toString();
-        return query;
     }
 }

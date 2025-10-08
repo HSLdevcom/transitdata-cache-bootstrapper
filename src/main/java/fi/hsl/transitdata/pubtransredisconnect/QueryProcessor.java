@@ -2,91 +2,62 @@ package fi.hsl.transitdata.pubtransredisconnect;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import static org.slf4j.MDC.putCloseable;
+
 public class QueryProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(QueryProcessor.class);
 
-    public Connection connection;
+    private final Connection connection;
 
     public QueryProcessor(final Connection connection) {
         this.connection = connection;
     }
 
-    public void executeAndProcessQuery(final AbstractResultSetProcessor processor) {
-        final String processorName = processor.getClass().getName();
-        long now = System.currentTimeMillis();
-        log.info("Starting query with result set processor {}. {}", processorName, now);
+    public <T> void executeAndProcessQuery(final AbstractResultSetProcessor<T> processor) {
+        var startTime = System.currentTimeMillis();
 
         ResultSet resultSet = null;
-        try {
-            final String query = processor.getQuery();
-            log.info("Executing query... {}", now);
-            resultSet = executeQuery(query);
-            log.info("Processing result set... {}", now);
-            processor.processResultSet(resultSet);
-            log.info("Query processed. {}", now);
-        } catch (JedisConnectionException e) {
-            log.error(String.format("Failed to connect to Redis while running processor %s.", processorName), e);
-            throw e;
+        try (var ignored = putCloseable("processorName", processor.getClass().getName())) {
+            log.info("Starting query");
+            var query = processor.getQuery();
+            log.info("Executing query");
+            resultSet = connection.createStatement().executeQuery(query);
+            log.info("Collecting results");
+            var results = processor.collectResults(resultSet);
+            log.info("Database query found {} rows", results.size());
+            closeQuery(resultSet);
+            log.info("Query closed");
+            processor.processItems(results);
+            log.info("Query processed");
         } catch (Exception e) {
             log.error("Failed to process query", e);
         } finally {
-            closeQuery(resultSet, now);
+            closeQuery(resultSet);
         }
 
-        long elapsed = (System.currentTimeMillis() - now) / 1000;
+        long elapsed = (System.currentTimeMillis() - startTime) / 1000;
         log.info("Data handled in " + elapsed + " seconds");
     }
-    
-    public void firstExecuteQueryThenReleaseDbResourcesAndThenHandleResults(final AbstractResultSetProcessor processor) {
-        final String processorName = processor.getClass().getName();
-        long now = System.currentTimeMillis();
-        log.info("[OPTIMIZED] Starting query with result set processor {}. {}", processorName, now);
-        
-        ResultSet resultSet = null;
-        try {
-            final String query = processor.getQuery();
-            log.info("[OPTIMIZED] Executing query... {}", now);
-            resultSet = executeQuery(query);
-            log.info("[OPTIMIZED] Processing result set... {}", now);
-            processor.processResultSet(resultSet);
-            log.info("[OPTIMIZED] Query processed. {}", now);
-        } catch (JedisConnectionException e) {
-            log.error(String.format("[OPTIMIZED] Failed to connect to Redis while running processor %s.", processorName), e);
-            throw e;
-        } catch (Exception e) {
-            log.error("[OPTIMIZED] Failed to process query", e);
-            closeQuery(resultSet, now);
-        }
-        
-        long elapsed = (System.currentTimeMillis() - now) / 1000;
-        log.info("[OPTIMIZED] Data handled in " + elapsed + " seconds");
-    }
-    
-    private ResultSet executeQuery(final String query) throws SQLException {
-        Statement statement = connection.createStatement();
-        return statement.executeQuery(query);
-    }
 
-    public static void closeQuery(final ResultSet resultSet, long now) {
+    public static void closeQuery(final ResultSet resultSet) {
         if (resultSet == null) {
-            log.warn("ResultSet is null, nothing to close. {}", now);
+            log.warn("ResultSet is null, nothing to close.");
             return;
         }
         try {
             if (resultSet.isClosed()) {
-                log.info("ResultSet is already closed, nothing to close. {}", now);
+                log.info("ResultSet is already closed, nothing to close.");
                 return;
             }
         } catch (SQLException e) {
-            log.info("Error occured when trying to check if ResultSet is closed. {}", now);
+            log.info("Error occured when trying to check if ResultSet is closed.");
         }
         Statement statement = null;
         try {
@@ -94,17 +65,18 @@ public class QueryProcessor {
         } catch (Exception e) {
             log.error("Failed to get Statement", e);
         }
-        if (resultSet != null)
-            try {
-                resultSet.close();
-                log.info("ResultSet closed. {}", now);
-            } catch (Exception e) {
-                log.error("Failed to close ResultSet", e);
-            }
+
+        try {
+            resultSet.close();
+            log.info("ResultSet closed.");
+        } catch (Exception e) {
+            log.error("Failed to close ResultSet", e);
+        }
+
         if (statement != null)
             try {
                 statement.close();
-                log.info("Statement closed. {}", now);
+                log.info("Statement closed.");
             } catch (Exception e) {
                 log.error("Failed to close Statement", e);
             }
