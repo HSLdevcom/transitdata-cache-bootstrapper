@@ -1,6 +1,5 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
-import com.microsoft.sqlserver.jdbc.SQLServerException;
 import com.typesafe.config.Config;
 import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.pulsar.PulsarApplication;
@@ -11,11 +10,14 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 
 import static fi.hsl.common.transitdata.TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP;
+import static java.time.OffsetTime.now;
+import static java.time.format.DateTimeFormatter.ISO_INSTANT;
+import static java.util.UUID.randomUUID;
+import static org.slf4j.MDC.putCloseable;
 
 public class Main {
 
@@ -54,64 +56,52 @@ public class Main {
     private void process() {
         log.info("Fetching data");
         try (Connection connection = DriverManager.getConnection(connectionString)) {
-            final QueryProcessor queryProcessor = new QueryProcessor(connection);
-            final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
-            final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisStore, queryUtils, redisTtl);
-            final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
+            final var queryProcessor = new QueryProcessor(connection);
+            final var journeyResultSetProcessor = new JourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
+            final var stopResultSetProcessor = new StopResultSetProcessor(redisStore, queryUtils, redisTtl);
+            final var metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
 
-            queryProcessor.firstExecuteQueryThenReleaseDbResourcesAndThenHandleResults(journeyResultSetProcessor);
+            queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
             queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
             queryProcessor.executeAndProcessQuery(metroJourneyResultSetProcessor);
 
             updateTimestamp();
 
-            log.info("All data processed, thank you.");
-        } catch (SQLServerException sqlServerException) {
-            String msg = "SQLServerException during query, Driver Error code: "
-                    + sqlServerException.getErrorCode()
-                    + " and SQL State: " + sqlServerException.getSQLState();
-            log.error(msg, sqlServerException);
-        } catch (Exception e) {
-            log.error("Unknown exception during query ", e);
+            log.info("All data processed");
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
     }
 
     public static void main(String[] args) {
-        String connectionString = "";
+        var jobId = randomUUID().toString();
 
-        try {
-            //The Default path is what works with Docker out-of-the-box. Override with a local file if needed
-            connectionString = System.getenv("TRANSITDATA_PUBTRANS_CONN_STRING");
+        try (var ignored = putCloseable("jobId", jobId)) {
+            log.info("Starting job {}", jobId);
+            var config = ConfigParser.createConfig();
+
+            try (var app = PulsarApplication.newInstance(config)) {
+                var context = app.getContext();
+                var main = new Main(context, System.getenv("TRANSITDATA_PUBTRANS_CONN_STRING"));
+                main.start();
+                log.info("PulsarApplication started successfully");
+            }
+
+            log.info("Job completed successfully");
         } catch (Exception e) {
-            log.error("Failed to read the DB connection string from the file", e);
-        }
-
-        if (connectionString.isEmpty()) {
-            log.error("Connection string empty, aborting.");
+            log.error("Job failed", e);
             System.exit(1);
-        }
-        Config config = ConfigParser.createConfig();
-
-        try (PulsarApplication app = PulsarApplication.newInstance(config)) {
-            PulsarApplicationContext context = app.getContext();
-            Main main = new Main(context, connectionString);
-            main.start();
-            log.info("PulsarApplication started successfully");
-        } catch (Exception e) {
-            log.error("Exception at main", e);
-            System.exit(1);
+            return;
         }
 
-        log.info("Application completed successfully.");
-        System.exit(0); // Exit with success code after successful execution
+        System.exit(0);
     }
 
     private void updateTimestamp() {
         redisStore.execute(jedis -> {
-            final OffsetDateTime now = OffsetDateTime.now();
-            final String ts = DateTimeFormatter.ISO_INSTANT.format(now);
-            log.info("Updating Redis with latest timestamp: " + ts);
-            final var result = jedis.set(KEY_LAST_CACHE_UPDATE_TIMESTAMP, ts);
+            final var timestamp = ISO_INSTANT.format(now());
+            log.info("Updating Redis with latest timestamp: " + timestamp);
+            final var result = jedis.set(KEY_LAST_CACHE_UPDATE_TIMESTAMP, timestamp);
             if (!redisStore.checkResponse(result)) {
                 log.error("Failed to update cache timestamp to Redis!");
             }

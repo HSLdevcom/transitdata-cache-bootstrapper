@@ -4,8 +4,9 @@ import fi.hsl.common.redis.RedisStore;
 
 import java.sql.ResultSet;
 import java.time.Duration;
+import java.util.Collection;
 
-public abstract class AbstractResultSetProcessor {
+public abstract class AbstractResultSetProcessor<T> {
 
     protected final RedisStore redisStore;
     protected final QueryUtils queryUtils;
@@ -17,7 +18,9 @@ public abstract class AbstractResultSetProcessor {
         this.redisTtl = redisTtl;
     }
 
-    public abstract void processResultSet(final ResultSet resultSet) throws Exception;
+    abstract String getQuery();
 
-    protected abstract String getQuery();
+    abstract Collection<T> collectResults(ResultSet resultSet) throws Exception;
+
+    abstract void processItems(Collection<T> items) throws Exception;
 }
