@@ -1,21 +1,26 @@
 package fi.hsl.transitdata.pubtransredisconnect;
 
-import java.util.*;
-import java.sql.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import com.microsoft.sqlserver.jdbc.SQLServerException;
-import com.typesafe.config.*;
+import com.typesafe.config.Config;
 import fi.hsl.common.config.ConfigParser;
 import fi.hsl.common.pulsar.PulsarApplication;
 import fi.hsl.common.pulsar.PulsarApplicationContext;
+import fi.hsl.common.redis.RedisStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.time.Duration;
+
+import static fi.hsl.common.transitdata.TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP;
+import static java.time.OffsetTime.now;
+import static java.time.format.DateTimeFormatter.ISO_INSTANT;
+import static java.util.UUID.randomUUID;
+import static org.slf4j.MDC.putCloseable;
+
 public class Main {
+
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     private final Config config;
@@ -23,163 +28,84 @@ public class Main {
     private final PulsarApplicationContext context;
     private final String connectionString;
 
-    private ScheduledExecutorService executor;
-    private AtomicBoolean processingActive = new AtomicBoolean(false);
-
-    private RedisUtils redisUtils;
+    private RedisStore redisStore;
     private QueryUtils queryUtils;
-
-    private final int UNHEALTHY_UPDATE_INTERVAL_SECS;
-    private long lastUpdateTime;
+    private Duration redisTtl;
 
     public Main(PulsarApplicationContext context, String connectionString) {
         this.context = context;
         this.config = context.getConfig();
         this.connectionString = connectionString;
-        this.UNHEALTHY_UPDATE_INTERVAL_SECS = config.getInt("application.unhealthyUpdateIntervalSecs");
-        this.lastUpdateTime = System.currentTimeMillis();
     }
 
-    final boolean lastUpdateTimeHealthy() {
-        long updateIntervalMillis = System.currentTimeMillis() - lastUpdateTime;
-        long intervalSecs = Math.round((double) updateIntervalMillis / 1000);
-        if (intervalSecs > UNHEALTHY_UPDATE_INTERVAL_SECS) {
-            log.error("Exceeded UNHEALTHY_UPDATE_INTERVAL_SECS threshold: {} s with interval of {} s",
-                    UNHEALTHY_UPDATE_INTERVAL_SECS, intervalSecs);
-            return false;
-        }
-        return true;
-    }
-
-    public void start() throws Exception {
-        if (context.getHealthServer() != null) {
-            context.getHealthServer().addCheck(() -> lastUpdateTimeHealthy());
-        }
+    public void start() {
         initialize();
-        startPolling();
-        //Invoke manually the first task immediately
         process();
-
-        // Block main thread in order to keep PulsarApplication alive
-        // TODO: Refactor
-        while (true) {
-            Thread.sleep(Long.MAX_VALUE);
-        }
     }
 
     private void initialize() {
-        redisUtils = new RedisUtils(context);
         final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
-        final int queryMinutesFromEvenHour = config.getInt("bootstrapper.queryMinutesFromEvenHour");
-        log.info("Fetching data from -" + queryHistoryInDays + " days to +" + queryFutureInDays + " days. "
-                + queryMinutesFromEvenHour + " minutes from even hour.");
-        queryUtils = new QueryUtils(queryHistoryInDays, queryFutureInDays, queryMinutesFromEvenHour);
-    }
-
-    private void startPolling() {
-        final long periodInSecs = 60 * 60;
-        final long delayInSecs = queryUtils.secondsUntilNextEvenHourPlusMinutes();
-
-        log.info("Starting scheduled poll task. First poll execution in " + delayInSecs + "secs");
-        TimerTask task = new TimerTask() {
-            @Override
-            public void run() {
-                log.info("Poll timer tick");
-                queryUtils.updateFromToDates();
-                process();
-            }
-        };
-
-        executor = Executors.newSingleThreadScheduledExecutor();
-        executor.scheduleAtFixedRate(task, delayInSecs, periodInSecs, TimeUnit.SECONDS);
+        log.info("Fetching data from -{} days to +{} days.",
+                queryHistoryInDays, queryFutureInDays);
+        redisStore = context.getRedisStore();
+        redisTtl = Duration.ofDays(config.getInt("bootstrapper.redisTTLInDays"));
+        queryUtils = new QueryUtils(queryHistoryInDays, queryFutureInDays);
     }
 
     private void process() {
-        if (!processingActive.getAndSet(true)) {
-            log.info("Fetching data");
-            try (Connection connection = DriverManager.getConnection(connectionString)) {
-                final QueryProcessor queryProcessor = new QueryProcessor(connection);
-                final JourneyResultSetProcessor journeyResultSetProcessor = new JourneyResultSetProcessor(redisUtils,
-                        queryUtils);
-                final StopResultSetProcessor stopResultSetProcessor = new StopResultSetProcessor(redisUtils,
-                        queryUtils);
-                final MetroJourneyResultSetProcessor metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(
-                        redisUtils, queryUtils);
+        log.info("Fetching data");
+        try (Connection connection = DriverManager.getConnection(connectionString)) {
+            final var queryProcessor = new QueryProcessor(connection);
+            final var journeyResultSetProcessor = new JourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
+            final var stopResultSetProcessor = new StopResultSetProcessor(redisStore, queryUtils, redisTtl);
+            final var metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
 
-                queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
-                queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
-                queryProcessor.executeAndProcessQuery(metroJourneyResultSetProcessor);
+            queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
+            queryProcessor.executeAndProcessQuery(stopResultSetProcessor);
+            queryProcessor.executeAndProcessQuery(metroJourneyResultSetProcessor);
 
-                redisUtils.updateTimestamp();
+            updateTimestamp();
 
-                lastUpdateTime = System.currentTimeMillis();
-                log.info("All data processed, thank you.");
-            } catch (SQLServerException sqlServerException) {
-                String msg = "SQLServerException during query, Driver Error code: " + sqlServerException.getErrorCode()
-                        + " and SQL State: " + sqlServerException.getSQLState();
-                log.error(msg, sqlServerException);
-                shutdown();
-            } catch (Exception e) {
-                log.error("Unknown exception during query ", e);
-                shutdown();
-            } finally {
-                processingActive.set(false);
-            }
-        } else {
-            log.warn("Processing already active, will not launch another task.");
+            log.info("All data processed");
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
-    }
-
-    private void shutdown() {
-        log.warn("Shutting down the application.");
-        if (redisUtils.jedis != null) {
-            redisUtils.jedis.close();
-        }
-        if (executor != null) {
-            executor.shutdown();
-        }
-        log.info("Shutdown completed, bye.");
     }
 
     public static void main(String[] args) {
-        String connectionString = "";
+        var jobId = randomUUID().toString();
 
-        try {
-            //Default path is what works with Docker out-of-the-box. Override with a local file if needed
-            connectionString = System.getenv("TRANSITDATA_PUBTRANS_CONN_STRING");
-        } catch (Exception e) {
-            log.error("Failed to read the DB connection string from the file", e);
-        }
+        try (var ignored = putCloseable("jobId", jobId)) {
+            log.info("Starting job {}", jobId);
+            var config = ConfigParser.createConfig();
 
-        if (connectionString.equals("")) {
-            log.error("Connection string empty, aborting.");
-            System.exit(1);
-        }
-        Config config = ConfigParser.createConfig();
-
-        PulsarApplication app = null;
-        while (app == null) {
-            try {
-                app = PulsarApplication.newInstance(config);
-            } catch (Exception e) {
-                log.info("Failed to create PulsarApplication instance, retrying in 5 seconds...", e);
-                try {
-                    Thread.sleep(5 * 1000); // Wait for 5 seconds before retrying
-                } catch (InterruptedException ie) {
-                    log.error("Retry sleep interrupted", ie);
-                    Thread.currentThread().interrupt(); // Restore the interrupted status
-                }
+            try (var app = PulsarApplication.newInstance(config)) {
+                var context = app.getContext();
+                var main = new Main(context, System.getenv("TRANSITDATA_PUBTRANS_CONN_STRING"));
+                main.start();
+                log.info("PulsarApplication started successfully");
             }
+
+            log.info("Job completed successfully");
+        } catch (Exception e) {
+            log.error("Job failed", e);
+            System.exit(1);
+            return;
         }
 
-        try {
-            PulsarApplicationContext context = app.getContext();
-            Main main = new Main(context, connectionString);
-            main.start();
-            log.info("PulsarApplication started successfully");
-        } catch (Exception e) {
-            log.error("Exception at main", e);
-        }
+        System.exit(0);
+    }
+
+    private void updateTimestamp() {
+        redisStore.execute(jedis -> {
+            final var timestamp = ISO_INSTANT.format(now());
+            log.info("Updating Redis with latest timestamp: " + timestamp);
+            final var result = jedis.set(KEY_LAST_CACHE_UPDATE_TIMESTAMP, timestamp);
+            if (!redisStore.checkResponse(result)) {
+                log.error("Failed to update cache timestamp to Redis!");
+            }
+            return result;
+        });
     }
 }

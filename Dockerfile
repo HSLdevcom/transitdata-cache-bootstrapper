@@ -1,4 +1,4 @@
-FROM eclipse-temurin:11-alpine
+FROM eclipse-temurin:24-alpine
 #Install curl for health check
 RUN apk add --no-cache curl
 
