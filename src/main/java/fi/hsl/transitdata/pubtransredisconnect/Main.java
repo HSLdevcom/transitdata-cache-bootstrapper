@@ -12,9 +12,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 
 import static fi.hsl.common.transitdata.TransitdataProperties.KEY_LAST_CACHE_UPDATE_TIMESTAMP;
-import static java.time.OffsetTime.now;
 import static java.time.format.DateTimeFormatter.ISO_INSTANT;
 import static java.util.UUID.randomUUID;
 import static org.slf4j.MDC.putCloseable;
@@ -99,7 +99,7 @@ public class Main {
 
     private void updateTimestamp() {
         redisStore.execute(jedis -> {
-            final var timestamp = ISO_INSTANT.format(now());
+            final var timestamp = ISO_INSTANT.format(OffsetDateTime.now());
             log.info("Updating Redis with latest timestamp: " + timestamp);
             final var result = jedis.set(KEY_LAST_CACHE_UPDATE_TIMESTAMP, timestamp);
             if (!redisStore.checkResponse(result)) {
