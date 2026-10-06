@@ -7,8 +7,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>24</maven.compiler.source>
-        <maven.compiler.target>24</maven.compiler.target>
+        <maven.compiler.release>25</maven.compiler.release>
         <common.version>2.0.7</common.version>
         <spotlessMavenPlugin.version>2.43.0</spotlessMavenPlugin.version>
         <googleJavaFormat.version>1.17.0</googleJavaFormat.version>
@@ -116,8 +115,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.0</version>
                 <configuration>
-                    <source>${maven.compiler.source}</source>
-                    <target>${maven.compiler.target}</target>
+                    <release>${maven.compiler.release}</release>
                 </configuration>
             </plugin>
             <plugin>
