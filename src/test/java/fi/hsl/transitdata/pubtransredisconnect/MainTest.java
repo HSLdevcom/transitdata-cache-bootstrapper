@@ -71,8 +71,8 @@ public class MainTest {
         jedis = mock(Jedis.class);
         when(jedis.set(anyString(), anyString())).thenReturn("OK");
         redisStore = succeedingRedisStore();
-        when(redisStore.execute(any())).thenAnswer(
-                invocation -> ((Function<Jedis, Object>) invocation.getArgument(0)).apply(jedis));
+        when(redisStore.execute(any()))
+                .thenAnswer(invocation -> ((Function<Jedis, Object>) invocation.getArgument(0)).apply(jedis));
 
         context = mock(PulsarApplicationContext.class);
         when(context.getConfig()).thenReturn(ConfigParser.createConfig());
@@ -132,8 +132,7 @@ public class MainTest {
         when(journeys.getString("direction")).thenReturn("1");
         when(journeys.getString("operating_day")).thenReturn("20261006");
         when(journeys.getString("start_time")).thenReturn("07:05:00");
-        when(statement.executeQuery(anyString())).thenReturn(journeys, mock(ResultSet.class),
-                mock(ResultSet.class));
+        when(statement.executeQuery(anyString())).thenReturn(journeys, mock(ResultSet.class), mock(ResultSet.class));
 
         new Main(context, JDBC_URL).start();
 

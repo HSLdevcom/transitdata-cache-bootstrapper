@@ -46,8 +46,7 @@ public class Main {
     private void initialize() {
         final int queryHistoryInDays = config.getInt("bootstrapper.queryHistoryInDays");
         final int queryFutureInDays = config.getInt("bootstrapper.queryFutureInDays");
-        log.info("Fetching data from -{} days to +{} days.",
-                queryHistoryInDays, queryFutureInDays);
+        log.info("Fetching data from -{} days to +{} days.", queryHistoryInDays, queryFutureInDays);
         redisStore = context.getRedisStore();
         redisTtl = Duration.ofDays(config.getInt("bootstrapper.redisTTLInDays"));
         queryUtils = new QueryUtils(queryHistoryInDays, queryFutureInDays);
@@ -59,7 +58,8 @@ public class Main {
             final var queryProcessor = new QueryProcessor(connection);
             final var journeyResultSetProcessor = new JourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
             final var stopResultSetProcessor = new StopResultSetProcessor(redisStore, queryUtils, redisTtl);
-            final var metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisStore, queryUtils, redisTtl);
+            final var metroJourneyResultSetProcessor = new MetroJourneyResultSetProcessor(redisStore, queryUtils,
+                    redisTtl);
 
             queryProcessor.executeAndProcessQuery(journeyResultSetProcessor);
             queryProcessor.executeAndProcessQuery(stopResultSetProcessor);

@@ -42,8 +42,7 @@ public class MetroJourneyResultSetProcessorTest {
 
     @Test
     public void queryIsUnchanged() {
-        String expected = "SELECT "
-                + "   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS dvj_id, "
+        String expected = "SELECT " + "   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS dvj_id, "
                 + "   KVV.StringValue AS route, "
                 + "   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS direction, "
                 + "   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS operating_day, "
@@ -60,11 +59,9 @@ public class MetroJourneyResultSetProcessorTest {
                 + "LEFT JOIN ptDOI4_Community.dbo.ObjectType AS OT ON (KT.ExtendsObjectTypeNumber = OT.Number) "
                 + "LEFT JOIN ptDOI4_Community.dbo.JourneyPatternPoint AS JPP ON (VJT.StartsAtJourneyPatternPointGid = JPP.Gid) "
                 + "WHERE    (        KT.Name = 'JoreIdentity'        OR KT.Name = 'JoreRouteIdentity'        OR KT.Name = 'RouteName'    ) "
-                + "   AND OT.Name = 'VehicleJourney' "
-                + "   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL "
-                + "   AND DVJ.OperatingDayDate >= '" + queryUtils.from + "' "
-                + "   AND DVJ.OperatingDayDate < '" + queryUtils.to + "' "
-                + "   AND DVJ.IsReplacedById IS NULL "
+                + "   AND OT.Name = 'VehicleJourney' " + "   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL "
+                + "   AND DVJ.OperatingDayDate >= '" + queryUtils.from + "' " + "   AND DVJ.OperatingDayDate < '"
+                + queryUtils.to + "' " + "   AND DVJ.IsReplacedById IS NULL "
                 + "   AND VJT.TransportModeCode = 'METRO' ";
 
         assertEquals(expected, processor.getQuery());
@@ -99,16 +96,16 @@ public class MetroJourneyResultSetProcessorTest {
         processor.processItems(List.of(ITEM));
 
         verify(redisStore).setValues("metro:1020453_2026-10-06T05:30:00Z",
-                Map.of("dvj-id", "9187251000999999", "route-name", "31M1", "direction", "1", "start-time",
-                        "05:30:00", "operating-day", "20261006", "start-datetime", "2026-10-06T05:30:00Z",
-                        "start-stop-number", "1020453"));
+                Map.of("dvj-id", "9187251000999999", "route-name", "31M1", "direction", "1", "start-time", "05:30:00",
+                        "operating-day", "20261006", "start-datetime", "2026-10-06T05:30:00Z", "start-stop-number",
+                        "1020453"));
         verify(redisStore).setExpire("metro:1020453_2026-10-06T05:30:00Z", TTL);
     }
 
     @Test
     public void startTimePastMidnightRollsOverToNextUtcDay() throws Exception {
-        processor.processItems(
-                List.of(new MetroJourneyResultItem("1", "31M2", "2", "20261006", "25:10:00", "1020454")));
+        processor
+                .processItems(List.of(new MetroJourneyResultItem("1", "31M2", "2", "20261006", "25:10:00", "1020454")));
 
         verify(redisStore).setValues(eq("metro:1020454_2026-10-07T01:10:00Z"), any());
     }
@@ -116,8 +113,8 @@ public class MetroJourneyResultSetProcessorTest {
     @Test
     public void dateTimeIgnoresDaylightSavingTransitions() throws Exception {
         // Treated as UTC, not Europe/Helsinki: the DST switch day gives the same wall-clock instant
-        processor.processItems(
-                List.of(new MetroJourneyResultItem("1", "31M1", "1", "20261025", "05:30:00", "1020453")));
+        processor
+                .processItems(List.of(new MetroJourneyResultItem("1", "31M1", "1", "20261025", "05:30:00", "1020453")));
 
         verify(redisStore).setValues(eq("metro:1020453_2026-10-25T05:30:00Z"), any());
     }

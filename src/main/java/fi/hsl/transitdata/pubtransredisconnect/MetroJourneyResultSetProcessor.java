@@ -33,7 +33,7 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor<M
     private static final Logger log = LoggerFactory.getLogger(MetroJourneyResultSetProcessor.class);
 
     record MetroJourneyResultItem(String dvjId, String routeName, String direction, String operatingDay,
-                                  String startTime, String stopNumber) {
+            String startTime, String stopNumber) {
     }
 
     public MetroJourneyResultSetProcessor(RedisStore redisStore, QueryUtils queryUtils, Duration redisTtl) {
@@ -42,32 +42,27 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor<M
 
     @Override
     String getQuery() {
-        return "SELECT " +
-                "   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS " + queryUtils.DVJ_ID + ", " +
-                "   KVV.StringValue AS " + queryUtils.ROUTE_NAME + ", " +
-                "   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS "
-                + queryUtils.DIRECTION + ", " +
-                "   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + queryUtils.OPERATING_DAY + ", " +
-                "   RIGHT('0' + (CONVERT(VARCHAR(2), (DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime)))), 2) " +
-                "       + ':' + RIGHT('0' + CONVERT(VARCHAR(2), ((DATEDIFF(MINUTE, '1900-01-01', PlannedStartOffsetDateTime)) " +
-                "       - ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS "
-                + queryUtils.START_TIME + ", " +
-                "   CONVERT(CHAR(7), JPP.Number) AS " + queryUtils.STOP_NUMBER + " " +
-                "FROM ptDOI4_Community.dbo.DatedVehicleJourney AS DVJ " +
-                "LEFT JOIN ptDOI4_Community.dbo.VehicleJourney AS VJ ON (DVJ.IsBasedOnVehicleJourneyId = VJ.Id) " +
-                "LEFT JOIN ptDOI4_Community.dbo.VehicleJourneyTemplate AS VJT ON (DVJ.IsBasedOnVehicleJourneyTemplateId = VJT.Id) " +
-                "LEFT JOIN ptDOI4_Community.T.KeyVariantValue AS KVV ON (KVV.IsForObjectId = VJ.Id) " +
-                "LEFT JOIN ptDOI4_Community.dbo.KeyVariantType AS KVT ON (KVT.Id = KVV.IsOfKeyVariantTypeId) " +
-                "LEFT JOIN ptDOI4_Community.dbo.KeyType AS KT ON (KT.Id = KVT.IsForKeyTypeId) " +
-                "LEFT JOIN ptDOI4_Community.dbo.ObjectType AS OT ON (KT.ExtendsObjectTypeNumber = OT.Number) " +
-                "LEFT JOIN ptDOI4_Community.dbo.JourneyPatternPoint AS JPP ON (VJT.StartsAtJourneyPatternPointGid = JPP.Gid) " +
-                "WHERE " + "   ( " + "       KT.Name = 'JoreIdentity' " +
-                "       OR KT.Name = 'JoreRouteIdentity' " + "       OR KT.Name = 'RouteName' " +
-                "   ) " + "   AND OT.Name = 'VehicleJourney' " +
-                "   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL " +
-                "   AND DVJ.OperatingDayDate >= '" + queryUtils.from + "' " +
-                "   AND DVJ.OperatingDayDate < '" + queryUtils.to + "' " +
-                "   AND DVJ.IsReplacedById IS NULL " + "   AND VJT.TransportModeCode = 'METRO' ";
+        return "SELECT " + "   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS " + queryUtils.DVJ_ID + ", "
+                + "   KVV.StringValue AS " + queryUtils.ROUTE_NAME + ", "
+                + "   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS " + queryUtils.DIRECTION
+                + ", " + "   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS " + queryUtils.OPERATING_DAY + ", "
+                + "   RIGHT('0' + (CONVERT(VARCHAR(2), (DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime)))), 2) "
+                + "       + ':' + RIGHT('0' + CONVERT(VARCHAR(2), ((DATEDIFF(MINUTE, '1900-01-01', PlannedStartOffsetDateTime)) "
+                + "       - ((DATEDIFF(HOUR, '1900-01-01', PlannedStartOffsetDateTime) * 60)))), 2) + ':00' AS "
+                + queryUtils.START_TIME + ", " + "   CONVERT(CHAR(7), JPP.Number) AS " + queryUtils.STOP_NUMBER + " "
+                + "FROM ptDOI4_Community.dbo.DatedVehicleJourney AS DVJ "
+                + "LEFT JOIN ptDOI4_Community.dbo.VehicleJourney AS VJ ON (DVJ.IsBasedOnVehicleJourneyId = VJ.Id) "
+                + "LEFT JOIN ptDOI4_Community.dbo.VehicleJourneyTemplate AS VJT ON (DVJ.IsBasedOnVehicleJourneyTemplateId = VJT.Id) "
+                + "LEFT JOIN ptDOI4_Community.T.KeyVariantValue AS KVV ON (KVV.IsForObjectId = VJ.Id) "
+                + "LEFT JOIN ptDOI4_Community.dbo.KeyVariantType AS KVT ON (KVT.Id = KVV.IsOfKeyVariantTypeId) "
+                + "LEFT JOIN ptDOI4_Community.dbo.KeyType AS KT ON (KT.Id = KVT.IsForKeyTypeId) "
+                + "LEFT JOIN ptDOI4_Community.dbo.ObjectType AS OT ON (KT.ExtendsObjectTypeNumber = OT.Number) "
+                + "LEFT JOIN ptDOI4_Community.dbo.JourneyPatternPoint AS JPP ON (VJT.StartsAtJourneyPatternPointGid = JPP.Gid) "
+                + "WHERE " + "   ( " + "       KT.Name = 'JoreIdentity' " + "       OR KT.Name = 'JoreRouteIdentity' "
+                + "       OR KT.Name = 'RouteName' " + "   ) " + "   AND OT.Name = 'VehicleJourney' "
+                + "   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL " + "   AND DVJ.OperatingDayDate >= '"
+                + queryUtils.from + "' " + "   AND DVJ.OperatingDayDate < '" + queryUtils.to + "' "
+                + "   AND DVJ.IsReplacedById IS NULL " + "   AND VJT.TransportModeCode = 'METRO' ";
     }
 
     @Override
@@ -75,14 +70,10 @@ public class MetroJourneyResultSetProcessor extends AbstractResultSetProcessor<M
         var items = new ArrayList<MetroJourneyResultItem>();
 
         while (resultSet.next()) {
-            items.add(new MetroJourneyResultItem(
-                    resultSet.getString(queryUtils.DVJ_ID),
-                    resultSet.getString(queryUtils.ROUTE_NAME),
-                    resultSet.getString(queryUtils.DIRECTION),
-                    resultSet.getString(queryUtils.OPERATING_DAY),
-                    resultSet.getString(queryUtils.START_TIME),
-                    resultSet.getString(queryUtils.STOP_NUMBER)
-            ));
+            items.add(new MetroJourneyResultItem(resultSet.getString(queryUtils.DVJ_ID),
+                    resultSet.getString(queryUtils.ROUTE_NAME), resultSet.getString(queryUtils.DIRECTION),
+                    resultSet.getString(queryUtils.OPERATING_DAY), resultSet.getString(queryUtils.START_TIME),
+                    resultSet.getString(queryUtils.STOP_NUMBER)));
         }
 
         return items;

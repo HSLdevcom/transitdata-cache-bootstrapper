@@ -43,8 +43,7 @@ public class JourneyResultSetProcessorTest {
 
     @Test
     public void queryIsUnchanged() {
-        String expected = "SELECT "
-                + "   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS dvj_id, "
+        String expected = "SELECT " + "   DISTINCT CONVERT(CHAR(16), DVJ.Id) AS dvj_id, "
                 + "   KVV.StringValue AS route, "
                 + "   SUBSTRING(CONVERT(CHAR(16), VJT.IsWorkedOnDirectionOfLineGid), 12, 1) AS direction, "
                 + "   CONVERT(CHAR(8), DVJ.OperatingDayDate, 112) AS operating_day, "
@@ -59,11 +58,9 @@ public class JourneyResultSetProcessorTest {
                 + "LEFT JOIN ptDOI4_Community.dbo.KeyType AS KT ON (KT.Id = KVT.IsForKeyTypeId) "
                 + "LEFT JOIN ptDOI4_Community.dbo.ObjectType AS OT ON (KT.ExtendsObjectTypeNumber = OT.Number) "
                 + "WHERE    (        KT.Name = 'JoreIdentity'        OR KT.Name = 'JoreRouteIdentity'        OR KT.Name = 'RouteName'    ) "
-                + "   AND OT.Name = 'VehicleJourney' "
-                + "   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL "
-                + "   AND DVJ.OperatingDayDate >= '" + queryUtils.from + "' "
-                + "   AND DVJ.OperatingDayDate < '" + queryUtils.to + "' "
-                + "   AND DVJ.IsReplacedById IS NULL ";
+                + "   AND OT.Name = 'VehicleJourney' " + "   AND VJT.IsWorkedOnDirectionOfLineGid IS NOT NULL "
+                + "   AND DVJ.OperatingDayDate >= '" + queryUtils.from + "' " + "   AND DVJ.OperatingDayDate < '"
+                + queryUtils.to + "' " + "   AND DVJ.IsReplacedById IS NULL ";
 
         assertEquals(expected, processor.getQuery());
     }
@@ -107,8 +104,8 @@ public class JourneyResultSetProcessorTest {
         processor.processItems(List.of(ITEM));
 
         InOrder order = inOrder(redisStore);
-        order.verify(redisStore).setValues("dvj:9187251000123456", Map.of("route-name", "1069", "direction", "1",
-                "start-time", "07:05:00", "operating-day", "20261006"));
+        order.verify(redisStore).setValues("dvj:9187251000123456",
+                Map.of("route-name", "1069", "direction", "1", "start-time", "07:05:00", "operating-day", "20261006"));
         order.verify(redisStore).setExpire("dvj:9187251000123456", TTL);
         order.verify(redisStore).setValue("jore:1069-1-20261006-07:05:00", "9187251000123456");
         order.verify(redisStore).setExpire("jore:1069-1-20261006-07:05:00", TTL);

@@ -68,15 +68,14 @@ public class CacheBootstrapperIT {
     public static void startContainers() throws Exception {
         mssql = new MSSQLServerContainer<>(MSSQL_IMAGE).acceptLicense();
         mssql.start();
-        connectionString = mssql.getJdbcUrl() + ";user=" + mssql.getUsername() + ";password="
-                + mssql.getPassword();
+        connectionString = mssql.getJdbcUrl() + ";user=" + mssql.getUsername() + ";password=" + mssql.getPassword();
         createPubtransSchema();
 
         // Sentinel announces the master as 127.0.0.1:<redisPort>, so host and container ports must be the same
         redisPort = freePort();
         sentinelPort = freePort();
-        String sentinelConf = "port " + sentinelPort + "\\nsentinel monitor " + MASTER_NAME + " 127.0.0.1 "
-                + redisPort + " 1\\n";
+        String sentinelConf = "port " + sentinelPort + "\\nsentinel monitor " + MASTER_NAME + " 127.0.0.1 " + redisPort
+                + " 1\\n";
         redis = new FixedHostPortGenericContainer<>(REDIS_IMAGE).withFixedExposedPort(redisPort, redisPort)
                 .withFixedExposedPort(sentinelPort, sentinelPort)
                 .withCommand("sh", "-c",
@@ -112,23 +111,25 @@ public class CacheBootstrapperIT {
             String today = basicDate(0);
             String historyEdge = basicDate(-HISTORY_DAYS);
 
-            assertEquals(new TreeSet<>(List.of(
-                    "dvj:9187251000000001", "dvj:9187251000000002", "dvj:9187251000000003",
-                    "dvj:9187251000000009",
-                    "jore:1069-1-" + today + "-07:05:00", "jore:550-2-" + today + "-25:10:00",
-                    "jore:31M1-1-" + today + "-05:30:00", "jore:1069-1-" + historyEdge + "-07:05:00",
-                    "jpp:" + BUS_STOP_GID, "jpp:" + METRO_STOP_GID,
-                    "metro:1020453_" + isoDate(0) + "T05:30:00Z",
-                    "cache-update-ts")), new TreeSet<>(jedis.keys("*")));
+            assertEquals(
+                    new TreeSet<>(List.of("dvj:9187251000000001", "dvj:9187251000000002", "dvj:9187251000000003",
+                            "dvj:9187251000000009", "jore:1069-1-" + today + "-07:05:00",
+                            "jore:550-2-" + today + "-25:10:00", "jore:31M1-1-" + today + "-05:30:00",
+                            "jore:1069-1-" + historyEdge + "-07:05:00", "jpp:" + BUS_STOP_GID, "jpp:" + METRO_STOP_GID,
+                            "metro:1020453_" + isoDate(0) + "T05:30:00Z", "cache-update-ts")),
+                    new TreeSet<>(jedis.keys("*")));
 
-            assertEquals(Map.of("route-name", "1069", "direction", "1", "start-time", "07:05:00",
-                    "operating-day", today), jedis.hgetAll("dvj:9187251000000001"));
-            assertEquals(Map.of("route-name", "550", "direction", "2", "start-time", "25:10:00",
-                    "operating-day", today), jedis.hgetAll("dvj:9187251000000002"));
-            assertEquals(Map.of("route-name", "31M1", "direction", "1", "start-time", "05:30:00",
-                    "operating-day", today), jedis.hgetAll("dvj:9187251000000003"));
-            assertEquals(Map.of("route-name", "1069", "direction", "1", "start-time", "07:05:00",
-                    "operating-day", historyEdge), jedis.hgetAll("dvj:9187251000000009"));
+            assertEquals(
+                    Map.of("route-name", "1069", "direction", "1", "start-time", "07:05:00", "operating-day", today),
+                    jedis.hgetAll("dvj:9187251000000001"));
+            assertEquals(
+                    Map.of("route-name", "550", "direction", "2", "start-time", "25:10:00", "operating-day", today),
+                    jedis.hgetAll("dvj:9187251000000002"));
+            assertEquals(
+                    Map.of("route-name", "31M1", "direction", "1", "start-time", "05:30:00", "operating-day", today),
+                    jedis.hgetAll("dvj:9187251000000003"));
+            assertEquals(Map.of("route-name", "1069", "direction", "1", "start-time", "07:05:00", "operating-day",
+                    historyEdge), jedis.hgetAll("dvj:9187251000000009"));
 
             assertEquals("9187251000000001", jedis.get("jore:1069-1-" + today + "-07:05:00"));
             assertEquals("9187251000000002", jedis.get("jore:550-2-" + today + "-25:10:00"));
@@ -137,9 +138,10 @@ public class CacheBootstrapperIT {
             assertEquals("1020001", jedis.get("jpp:" + BUS_STOP_GID));
             assertEquals("1020453", jedis.get("jpp:" + METRO_STOP_GID));
 
-            assertEquals(Map.of("dvj-id", "9187251000000003", "route-name", "31M1", "direction", "1",
-                    "start-time", "05:30:00", "operating-day", today, "start-datetime",
-                    isoDate(0) + "T05:30:00Z", "start-stop-number", "1020453"),
+            assertEquals(
+                    Map.of("dvj-id", "9187251000000003", "route-name", "31M1", "direction", "1", "start-time",
+                            "05:30:00", "operating-day", today, "start-datetime", isoDate(0) + "T05:30:00Z",
+                            "start-stop-number", "1020453"),
                     jedis.hgetAll("metro:1020453_" + isoDate(0) + "T05:30:00Z"));
 
             assertTtlDays(jedis, "dvj:9187251000000001", 2);
@@ -243,11 +245,10 @@ public class CacheBootstrapperIT {
                     + METRO_STOP_GID + ", 1020453)");
 
             // Templates: bus direction 1 and 2, metro direction 1, and one without a direction
-            statement.execute("INSERT INTO dbo.VehicleJourneyTemplate VALUES "
-                    + "(501, " + BUS_DIRECTION_1_GID + ", " + BUS_STOP_GID + ", 'BUS'), "
-                    + "(502, " + BUS_DIRECTION_2_GID + ", " + BUS_STOP_GID + ", 'BUS'), "
-                    + "(503, " + METRO_DIRECTION_1_GID + ", " + METRO_STOP_GID + ", 'METRO'), "
-                    + "(504, NULL, " + BUS_STOP_GID + ", 'BUS')");
+            statement.execute("INSERT INTO dbo.VehicleJourneyTemplate VALUES " + "(501, " + BUS_DIRECTION_1_GID + ", "
+                    + BUS_STOP_GID + ", 'BUS'), " + "(502, " + BUS_DIRECTION_2_GID + ", " + BUS_STOP_GID + ", 'BUS'), "
+                    + "(503, " + METRO_DIRECTION_1_GID + ", " + METRO_STOP_GID + ", 'METRO'), " + "(504, NULL, "
+                    + BUS_STOP_GID + ", 'BUS')");
             statement.execute("INSERT INTO dbo.VehicleJourney VALUES "
                     + "(1001, '1900-01-01T07:05:00'), (1002, '1900-01-02T01:10:00'), "
                     + "(1003, '1900-01-01T05:30:00'), (1006, '1900-01-01T08:00:00'), "
@@ -257,17 +258,15 @@ public class CacheBootstrapperIT {
 
             statement.execute("INSERT INTO dbo.DatedVehicleJourney VALUES "
                     // included: bus today, bus past midnight today, metro today, bus at the history edge
-                    + "(9187251000000001, 1001, 501, '" + isoDate(0) + "', NULL), "
-                    + "(9187251000000002, 1002, 502, '" + isoDate(0) + "', NULL), "
-                    + "(9187251000000003, 1003, 503, '" + isoDate(0) + "', NULL), "
+                    + "(9187251000000001, 1001, 501, '" + isoDate(0) + "', NULL), " + "(9187251000000002, 1002, 502, '"
+                    + isoDate(0) + "', NULL), " + "(9187251000000003, 1003, 503, '" + isoDate(0) + "', NULL), "
                     + "(9187251000000009, 1001, 501, '" + isoDate(-HISTORY_DAYS) + "', NULL), "
                     // excluded: beyond the window, replaced, wrong key type, wrong object type, no direction,
                     // before the window, at the (exclusive) future edge
                     + "(9187251000000004, 1001, 501, '" + isoDate(FUTURE_DAYS + 5) + "', NULL), "
                     + "(9187251000000005, 1001, 501, '" + isoDate(0) + "', 9187251000000001), "
-                    + "(9187251000000006, 1006, 501, '" + isoDate(0) + "', NULL), "
-                    + "(9187251000000010, 1007, 501, '" + isoDate(0) + "', NULL), "
-                    + "(9187251000000011, 1010, 504, '" + isoDate(0) + "', NULL), "
+                    + "(9187251000000006, 1006, 501, '" + isoDate(0) + "', NULL), " + "(9187251000000010, 1007, 501, '"
+                    + isoDate(0) + "', NULL), " + "(9187251000000011, 1010, 504, '" + isoDate(0) + "', NULL), "
                     + "(9187251000000007, 1001, 501, '" + isoDate(-HISTORY_DAYS - 1) + "', NULL), "
                     + "(9187251000000008, 1001, 501, '" + isoDate(FUTURE_DAYS) + "', NULL)");
         }

@@ -25,9 +25,8 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor<StopResul
 
     @Override
     String getQuery() {
-        return "SELECT [Gid], [Number] " +
-                "FROM [ptDOI4_Community].[dbo].[JourneyPatternPoint] AS JPP " +
-                "GROUP BY JPP.Gid, JPP.Number ";
+        return "SELECT [Gid], [Number] " + "FROM [ptDOI4_Community].[dbo].[JourneyPatternPoint] AS JPP "
+                + "GROUP BY JPP.Gid, JPP.Number ";
     }
 
     @Override
@@ -35,10 +34,7 @@ public class StopResultSetProcessor extends AbstractResultSetProcessor<StopResul
         final var items = new ArrayList<StopResultItem>();
 
         while (resultSet.next()) {
-            items.add(new StopResultItem(
-                    resultSet.getString("Gid"),
-                    resultSet.getString("Number")
-            ));
+            items.add(new StopResultItem(resultSet.getString("Gid"), resultSet.getString("Number")));
         }
 
         return items;
